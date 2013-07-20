@@ -2,15 +2,13 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
-        <groupId>com.ning</groupId>
+        <groupId>org.asynchttpclient</groupId>
         <artifactId>async-http-client-project</artifactId>
-        <version>1.8.0-SNAPSHOT</version>
+        <version>2.0.0-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-    <groupId>com.ning</groupId>
     <artifactId>async-http-client-providers-parent</artifactId>
     <name>Asynchronous Http Client Providers Parent</name>
-    <version>1.8.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <description>
         The Async Http Client providers library parent.
@@ -46,19 +44,21 @@
     </build>
 
     <modules>
-        <module>apache</module>
         <module>grizzly</module>
         <module>netty</module>
+        <!--
+        <module>netty-4</module>
+        -->
     </modules>
 
     <dependencies>
         <dependency>
-            <groupId>com.ning</groupId>
+            <groupId>org.asynchttpclient</groupId>
             <artifactId>async-http-client-api</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.ning</groupId>
+            <groupId>org.asynchttpclient</groupId>
             <artifactId>async-http-client-api</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

@@ -10,7 +10,7 @@ Async Http Client library purpose is to allow Java applications to easily execut
 <dependency>
   <groupId>com.ning</groupId>
   <artifactId>async-http-client</artifactId>
-  <version>1.7.8</version>
+  <version>1.7.16</version>
 </dependency>
 ```
 
@@ -29,7 +29,7 @@ Future<Response> f = asyncHttpClient.prepareGet("http://www.ning.com/").execute(
 Response r = f.get();
 ```
 
-Note that in this case all the content must be read fully in memory, even if you used `getResponseBodyAsStream()' method on returned `Response` object.
+Note that in this case all the content must be read fully in memory, even if you used `getResponseBodyAsStream()` method on returned `Response` object.
 
 You can also accomplish asynchronous (non-blocking) operation without using a Future if you want to receive and process the response in your handler:
 
@@ -180,3 +180,5 @@ Keep up to date on the library development by joining the Asynchronous HTTP Clie
 [Google Group](http://groups.google.com/group/asynchttpclient)
 
 or follow us on [Twitter](http://twitter.com/jfarcand)
+
+[![githalytics.com alpha](https://cruel-carlota.pagodabox.com/6433679063b2351599c6ca44a08246a2 "githalytics.com")](http://githalytics.com/AsyncHttpClient/async-http-client)
