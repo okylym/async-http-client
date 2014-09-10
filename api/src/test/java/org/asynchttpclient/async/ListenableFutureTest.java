@@ -12,6 +12,8 @@
  */
 package org.asynchttpclient.async;
 
+import static org.testng.Assert.assertEquals;
+
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.ListenableFuture;
 import org.asynchttpclient.Response;
@@ -23,12 +25,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.testng.Assert.assertEquals;
-
 public abstract class ListenableFutureTest extends AbstractBasicTest {
 
     @Test(groups = { "standalone", "default_provider" })
-    public void testListenableFuture() throws Throwable {
+    public void testListenableFuture() throws Exception {
         final AtomicInteger statusCode = new AtomicInteger(500);
         AsyncHttpClient ahc = getAsyncHttpClient(null);
         try {

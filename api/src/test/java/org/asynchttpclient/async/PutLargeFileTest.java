@@ -12,47 +12,39 @@
  */
 package org.asynchttpclient.async;
 
+import static org.asynchttpclient.async.util.TestUtils.createTempFile;
+import static org.testng.Assert.assertEquals;
+
 import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.AsyncHttpClient.BoundRequestBuilder;
 import org.asynchttpclient.AsyncHttpClientConfig;
 import org.asynchttpclient.Response;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.testng.Assert;
-import org.testng.annotations.AfterMethod;
 import org.testng.annotations.Test;
 
 import javax.servlet.ServletException;
-import javax.servlet.ServletInputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.UUID;
 
 /**
  * @author Benjamin Hanzelmann
  */
 public abstract class PutLargeFileTest extends AbstractBasicTest {
 
-    private File largeFile;
-
     @Test(groups = { "standalone", "default_provider" }, enabled = true)
     public void testPutLargeFile() throws Exception {
-        byte[] bytes = "RatherLargeFileRatherLargeFileRatherLargeFileRatherLargeFile".getBytes("UTF-16");
-        long repeats = (1024 * 1024 * 100 / bytes.length) + 1;
-        largeFile = createTempFile(bytes, (int) repeats);
-        int timeout = (int) (largeFile.length() / 1000);
-        AsyncHttpClientConfig config = new AsyncHttpClientConfig.Builder().setConnectionTimeoutInMs(timeout).build();
-        AsyncHttpClient client = getAsyncHttpClient(config);
+
+        File file = createTempFile(1024 * 1024);
+
+        int timeout = (int) file.length() / 1000;
+
+        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setConnectionTimeout(timeout).build());
         try {
-            BoundRequestBuilder rb = client.preparePut(getTargetUrl());
-
-            rb.setBody(largeFile);
-
-            Response response = rb.execute().get();
-            Assert.assertEquals(200, response.getStatusCode());
+            Response response = client.preparePut(getTargetUrl()).setBody(file).execute().get();
+            assertEquals(response.getStatusCode(), 200);
         } finally {
             client.close();
         }
@@ -60,27 +52,16 @@ public abstract class PutLargeFileTest extends AbstractBasicTest {
 
     @Test(groups = { "standalone", "default_provider" })
     public void testPutSmallFile() throws Exception {
-        byte[] bytes = "RatherLargeFileRatherLargeFileRatherLargeFileRatherLargeFile".getBytes("UTF-16");
-        long repeats = (1024 / bytes.length) + 1;
-        // int timeout = (5000);
-        largeFile = createTempFile(bytes, (int) repeats);
+
+        File file = createTempFile(1024);
 
         AsyncHttpClient client = getAsyncHttpClient(null);
         try {
-            BoundRequestBuilder rb = client.preparePut(getTargetUrl());
-
-            rb.setBody(largeFile);
-
-            Response response = rb.execute().get();
-            Assert.assertEquals(200, response.getStatusCode());
+            Response response = client.preparePut(getTargetUrl()).setBody(file).execute().get();
+            assertEquals(response.getStatusCode(), 200);
         } finally {
             client.close();
         }
-    }
-
-    @AfterMethod
-    public void after() {
-        largeFile.delete();
     }
 
     @Override
@@ -89,53 +70,12 @@ public abstract class PutLargeFileTest extends AbstractBasicTest {
 
             public void handle(String arg0, Request arg1, HttpServletRequest req, HttpServletResponse resp) throws IOException, ServletException {
 
-                ServletInputStream in = req.getInputStream();
-                byte[] b = new byte[8092];
-
-                int count = -1;
-                int total = 0;
-                while ((count = in.read(b)) != -1) {
-                    total += count;
-                }
-
-                System.err.println("consumed " + total + " bytes.");
-
                 resp.setStatus(200);
                 resp.getOutputStream().flush();
                 resp.getOutputStream().close();
 
                 arg1.setHandled(true);
-
             }
         };
     }
-
-    private static final File TMP = new File(System.getProperty("java.io.tmpdir"), "ahc-tests-" + UUID.randomUUID().toString().substring(0, 8));
-
-    public static File createTempFile(byte[] pattern, int repeat) throws IOException {
-        TMP.mkdirs();
-        TMP.deleteOnExit();
-        File tmpFile = File.createTempFile("tmpfile-", ".data", TMP);
-        tmpFile.deleteOnExit();
-        write(pattern, repeat, tmpFile);
-
-        return tmpFile;
-    }
-
-    public static void write(byte[] pattern, int repeat, File file) throws IOException {
-        file.deleteOnExit();
-        file.getParentFile().mkdirs();
-        FileOutputStream out = null;
-        try {
-            out = new FileOutputStream(file);
-            for (int i = 0; i < repeat; i++) {
-                out.write(pattern);
-            }
-        } finally {
-            if (out != null) {
-                out.close();
-            }
-        }
-    }
-
 }

@@ -15,6 +15,11 @@
  */
 package org.asynchttpclient.async;
 
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertNull;
+import static org.testng.Assert.fail;
+
 import org.asynchttpclient.AsyncCompletionHandler;
 import org.asynchttpclient.AsyncCompletionHandlerBase;
 import org.asynchttpclient.AsyncHttpClient;
@@ -22,7 +27,6 @@ import org.asynchttpclient.AsyncHttpClientConfig;
 import org.asynchttpclient.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
@@ -33,17 +37,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNotNull;
-import static org.testng.Assert.assertNull;
-import static org.testng.Assert.fail;
-
 public abstract class ConnectionPoolTest extends AbstractBasicTest {
     protected final Logger log = LoggerFactory.getLogger(AbstractBasicTest.class);
 
     @Test(groups = { "standalone", "default_provider" })
     public void testMaxTotalConnections() {
-        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setAllowPoolingConnection(true).setMaximumConnectionsTotal(1).build());
+        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setAllowPoolingConnections(true).setMaxConnections(1).build());
         try {
             String url = getTargetUrl();
             int i;
@@ -65,7 +64,7 @@ public abstract class ConnectionPoolTest extends AbstractBasicTest {
 
     @Test(groups = { "standalone", "default_provider" })
     public void testMaxTotalConnectionsException() {
-        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setAllowPoolingConnection(true).setMaximumConnectionsTotal(1).build());
+        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setAllowPoolingConnections(true).setMaxConnections(1).build());
         try {
             String url = getTargetUrl();
             int i;
@@ -93,7 +92,7 @@ public abstract class ConnectionPoolTest extends AbstractBasicTest {
     }
 
     @Test(groups = { "standalone", "default_provider", "async" }, enabled = true, invocationCount = 10, alwaysRun = true)
-    public void asyncDoGetKeepAliveHandlerTest_channelClosedDoesNotFail() throws Throwable {
+    public void asyncDoGetKeepAliveHandlerTest_channelClosedDoesNotFail() throws Exception {
         AsyncHttpClient client = getAsyncHttpClient(null);
         try {
             // Use a l in case the assert fail
@@ -122,7 +121,7 @@ public abstract class ConnectionPoolTest extends AbstractBasicTest {
             client.prepareGet(getTargetUrl()).execute(handler);
 
             if (!l.await(TIMEOUT, TimeUnit.SECONDS)) {
-                Assert.fail("Timed out");
+                fail("Timed out");
             }
 
             assertEquals(remoteAddresses.size(), 2);
@@ -132,14 +131,8 @@ public abstract class ConnectionPoolTest extends AbstractBasicTest {
     }
 
     @Test(groups = { "standalone", "default_provider" })
-    public abstract void testInvalidConnectionsPool();
-
-    @Test(groups = { "standalone", "default_provider" })
-    public abstract void testValidConnectionsPool();
-
-    @Test(groups = { "standalone", "default_provider" })
-    public void multipleMaxConnectionOpenTest() throws Throwable {
-        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder().setAllowPoolingConnection(true).setConnectionTimeoutInMs(5000).setMaximumConnectionsTotal(1).build();
+    public void multipleMaxConnectionOpenTest() throws Exception {
+        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder().setAllowPoolingConnections(true).setConnectionTimeout(5000).setMaxConnections(1).build();
         AsyncHttpClient c = getAsyncHttpClient(cg);
         try {
             String body = "hello there";
@@ -166,8 +159,8 @@ public abstract class ConnectionPoolTest extends AbstractBasicTest {
     }
 
     @Test(groups = { "standalone", "default_provider" })
-    public void multipleMaxConnectionOpenTestWithQuery() throws Throwable {
-        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder().setAllowPoolingConnection(true).setConnectionTimeoutInMs(5000).setMaximumConnectionsTotal(1).build();
+    public void multipleMaxConnectionOpenTestWithQuery() throws Exception {
+        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder().setAllowPoolingConnections(true).setConnectionTimeout(5000).setMaxConnections(1).build();
         AsyncHttpClient c = getAsyncHttpClient(cg);
         try {
             String body = "hello there";
@@ -196,11 +189,11 @@ public abstract class ConnectionPoolTest extends AbstractBasicTest {
     /**
      * This test just make sure the hack used to catch disconnected channel under win7 doesn't throw any exception. The onComplete method must be only called once.
      * 
-     * @throws Throwable
+     * @throws Exception
      *             if something wrong happens.
      */
     @Test(groups = { "standalone", "default_provider" })
-    public void win7DisconnectTest() throws Throwable {
+    public void win7DisconnectTest() throws Exception {
         final AtomicInteger count = new AtomicInteger(0);
 
         AsyncHttpClient client = getAsyncHttpClient(null);
@@ -233,7 +226,7 @@ public abstract class ConnectionPoolTest extends AbstractBasicTest {
     }
 
     @Test(groups = { "standalone", "default_provider" })
-    public void asyncHandlerOnThrowableTest() throws Throwable {
+    public void asyncHandlerOnThrowableTest() throws Exception {
         AsyncHttpClient client = getAsyncHttpClient(null);
         try {
             final AtomicInteger count = new AtomicInteger();
@@ -248,7 +241,7 @@ public abstract class ConnectionPoolTest extends AbstractBasicTest {
                 });
 
                 client.prepareGet(getTargetUrl()).execute(new AsyncCompletionHandlerBase() {
-                    /* @Override */
+                    @Override
                     public void onThrowable(Throwable t) {
                         if (t.getMessage() != null && t.getMessage().equalsIgnoreCase(THIS_IS_NOT_FOR_YOU)) {
                             count.incrementAndGet();
@@ -268,5 +261,4 @@ public abstract class ConnectionPoolTest extends AbstractBasicTest {
             client.close();
         }
     }
-
 }

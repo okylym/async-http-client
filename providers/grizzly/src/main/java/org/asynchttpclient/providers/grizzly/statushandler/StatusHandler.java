@@ -13,21 +13,17 @@
 
 package org.asynchttpclient.providers.grizzly.statushandler;
 
-import org.asynchttpclient.providers.grizzly.HttpTransactionContext;
+import org.asynchttpclient.providers.grizzly.HttpTxContext;
 import org.glassfish.grizzly.filterchain.FilterChainContext;
 import org.glassfish.grizzly.http.HttpResponsePacket;
 
 public interface StatusHandler {
 
     public enum InvocationStatus {
-        CONTINUE,
-        STOP
+        CONTINUE, STOP
     }
 
-    boolean handleStatus(final HttpResponsePacket httpResponse,
-                         final HttpTransactionContext httpTransactionContext,
-                         final FilterChainContext ctx);
+    boolean handleStatus(final HttpResponsePacket httpResponse, final HttpTxContext httpTransactionContext, final FilterChainContext ctx);
 
     boolean handlesStatus(final int statusCode);
-
 }

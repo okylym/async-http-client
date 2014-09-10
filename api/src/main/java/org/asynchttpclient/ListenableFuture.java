@@ -30,7 +30,6 @@
  */
 package org.asynchttpclient;
 
-import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 
@@ -42,11 +41,11 @@ import java.util.concurrent.Future;
 public interface ListenableFuture<V> extends Future<V> {
 
     /**
-     * Execute a {@link Callable}  and if there is no exception, mark this Future as done and release the internal lock.
+     * Terminate and if there is no exception, mark this Future as done and release the internal lock.
      *
      * @param callable
      */
-    void done(Callable<?> callable);
+    void done();
 
     /**
      * Abort the current processing, and propagate the {@link Throwable} to the {@link AsyncHandler} or {@link Future}
@@ -56,26 +55,9 @@ public interface ListenableFuture<V> extends Future<V> {
     void abort(Throwable t);
 
     /**
-     * Set the content that will be returned by this instance
-     *
-     * @param v the content that will be returned by this instance
-     */
-    void content(V v);
-
-    /**
      * Touch the current instance to prevent external service to times out.
      */
     void touch();
-
-    /**
-     * Write the {@link Request} headers
-     */
-    boolean getAndSetWriteHeaders(boolean writeHeader);
-
-    /**
-     * Write the {@link Request} body
-     */
-    boolean getAndSetWriteBody(boolean writeBody);
 
     /**
      * <p>Adds a listener and executor to the ListenableFuture.

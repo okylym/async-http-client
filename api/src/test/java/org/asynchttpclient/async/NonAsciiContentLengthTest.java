@@ -12,14 +12,17 @@
  */
 package org.asynchttpclient.async;
 
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
+import static org.asynchttpclient.async.util.TestUtils.newJettyHttpServer;
+import static org.testng.Assert.assertEquals;
+
 import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.AsyncHttpClient.BoundRequestBuilder;
+import org.asynchttpclient.BoundRequestBuilder;
 import org.asynchttpclient.Response;
-import org.eclipse.jetty.server.Connector;
+import org.asynchttpclient.util.StandardCharsets;
 import org.eclipse.jetty.server.Request;
-import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import javax.servlet.ServletException;
@@ -27,22 +30,17 @@ import javax.servlet.ServletInputStream;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
-import static org.testng.Assert.assertEquals;
-
 public abstract class NonAsciiContentLengthTest extends AbstractBasicTest {
 
-    public void setUpServer() throws Exception {
-        server = new Server();
+    @BeforeClass(alwaysRun = true)
+    public void setUpGlobal() throws Exception {
         port1 = findFreePort();
-        Connector listener = new SelectChannelConnector();
-
-        listener.setHost("127.0.0.1");
-        listener.setPort(port1);
-        server.addConnector(listener);
+        server = newJettyHttpServer(port1);
         server.setHandler(new AbstractHandler() {
 
             public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
@@ -75,7 +73,6 @@ public abstract class NonAsciiContentLengthTest extends AbstractBasicTest {
 
     @Test(groups = { "standalone", "default_provider" })
     public void testNonAsciiContentLength() throws Exception {
-        setUpServer();
         execute("test");
         execute("\u4E00"); // Unicode CJK ideograph for one
     }
@@ -83,14 +80,13 @@ public abstract class NonAsciiContentLengthTest extends AbstractBasicTest {
     protected void execute(String body) throws IOException, InterruptedException, ExecutionException {
         AsyncHttpClient client = getAsyncHttpClient(null);
         try {
-            BoundRequestBuilder r = client.preparePost(getTargetUrl()).setBody(body).setBodyEncoding("UTF-8");
+            BoundRequestBuilder r = client.preparePost(getTargetUrl()).setBody(body).setBodyEncoding(StandardCharsets.UTF_8.name());
             Future<Response> f = r.execute();
             Response resp = f.get();
             assertEquals(resp.getStatusCode(), 200);
-            assertEquals(body, resp.getResponseBody("UTF-8"));
+            assertEquals(body, resp.getResponseBody(StandardCharsets.UTF_8.name()));
         } finally {
             client.close();
         }
     }
-
 }

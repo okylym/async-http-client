@@ -15,17 +15,20 @@
  */
 package org.asynchttpclient.async;
 
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
+import static org.asynchttpclient.async.util.TestUtils.newJettyHttpServer;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+
 import org.asynchttpclient.AsyncHandler;
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
 import org.asynchttpclient.HttpResponseBodyPart;
 import org.asynchttpclient.HttpResponseHeaders;
 import org.asynchttpclient.HttpResponseStatus;
-import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -33,6 +36,7 @@ import org.testng.annotations.Test;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,9 +44,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNotNull;
 
 /**
  * Reverse C10K Problem test.
@@ -62,7 +63,7 @@ public abstract class RC10KTest extends AbstractBasicTest {
         for (int i = 0; i < SRV_COUNT; i++) {
             ports[i] = createServer();
         }
-        log.info("Local HTTP servers started successfully");
+        logger.info("Local HTTP servers started successfully");
     }
 
     @AfterClass(alwaysRun = true)
@@ -73,12 +74,8 @@ public abstract class RC10KTest extends AbstractBasicTest {
     }
 
     private int createServer() throws Exception {
-        Server srv = new Server();
-        Connector listener = new SelectChannelConnector();
-        listener.setHost("127.0.0.1");
         int port = findFreePort();
-        listener.setPort(port);
-        srv.addConnector(listener);
+        Server srv = newJettyHttpServer(port);
         srv.setHandler(configureHandler());
         srv.start();
         servers.add(srv);
@@ -102,7 +99,7 @@ public abstract class RC10KTest extends AbstractBasicTest {
 
     @Test(timeOut = 10 * 60 * 1000, groups = "scalability")
     public void rc10kProblem() throws IOException, ExecutionException, TimeoutException, InterruptedException {
-        AsyncHttpClient ahc = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setMaximumConnectionsPerHost(C10K).setAllowPoolingConnection(true).build());
+        AsyncHttpClient ahc = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setMaxConnectionsPerHost(C10K).setAllowPoolingConnections(true).build());
         try {
             List<Future<Integer>> resps = new ArrayList<Future<Integer>>(C10K);
             int i = 0;
@@ -129,7 +126,7 @@ public abstract class RC10KTest extends AbstractBasicTest {
         }
 
         public void onThrowable(Throwable t) {
-            log.warn("onThrowable called.", t);
+            logger.warn("onThrowable called.", t);
         }
 
         public STATE onBodyPartReceived(HttpResponseBodyPart event) throws Exception {

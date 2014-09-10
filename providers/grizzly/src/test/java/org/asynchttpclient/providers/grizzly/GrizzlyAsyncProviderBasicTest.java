@@ -17,17 +17,10 @@ import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
 import org.asynchttpclient.AsyncHttpProviderConfig;
 import org.asynchttpclient.async.AsyncProvidersBasicTest;
-import org.asynchttpclient.providers.grizzly.GrizzlyAsyncHttpProviderConfig;
-import org.asynchttpclient.providers.grizzly.TransportCustomizer;
-import org.glassfish.grizzly.filterchain.FilterChainBuilder;
-import org.glassfish.grizzly.nio.transport.TCPNIOTransport;
-import org.glassfish.grizzly.strategies.SameThreadIOStrategy;
 import org.testng.annotations.Test;
 
-import static org.asynchttpclient.providers.grizzly.GrizzlyAsyncHttpProviderConfig.Property.TRANSPORT_CUSTOMIZER;
-
+@Test
 public class GrizzlyAsyncProviderBasicTest extends AsyncProvidersBasicTest {
-
 
     @Override
     public AsyncHttpClient getAsyncHttpClient(AsyncHttpClientConfig config) {
@@ -35,25 +28,13 @@ public class GrizzlyAsyncProviderBasicTest extends AsyncProvidersBasicTest {
     }
 
     @Override
-    @Test
-    public void asyncHeaderPOSTTest() throws Throwable {
-        super.asyncHeaderPOSTTest();    //To change body of overridden methods use File | Settings | File Templates.
-    }
-
-    @Override
-    protected AsyncHttpProviderConfig getProviderConfig() {
+    protected AsyncHttpProviderConfig<?, ?> getProviderConfig() {
         final GrizzlyAsyncHttpProviderConfig config = new GrizzlyAsyncHttpProviderConfig();
-        config.addProperty(TRANSPORT_CUSTOMIZER, new TransportCustomizer() {
-            @Override
-            public void customize(TCPNIOTransport transport, FilterChainBuilder builder) {
-                transport.setTcpNoDelay(true);
-                transport.setIOStrategy(SameThreadIOStrategy.getInstance());
-            }
-        });
         return config;
     }
 
-    @Test(groups = {"standalone", "default_provider", "async"}, enabled = false)
-    public void asyncDoPostBasicGZIPTest() throws Throwable {
+    @Override
+    protected String acceptEncodingHeader() {
+        return "gzip";
     }
 }

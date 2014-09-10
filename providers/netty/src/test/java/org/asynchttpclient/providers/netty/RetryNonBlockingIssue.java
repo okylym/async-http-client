@@ -12,29 +12,29 @@
  */
 package org.asynchttpclient.providers.netty;
 
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
+import static org.asynchttpclient.async.util.TestUtils.newJettyHttpServer;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
+
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
 import org.asynchttpclient.ListenableFuture;
+import org.asynchttpclient.Request;
 import org.asynchttpclient.RequestBuilder;
 import org.asynchttpclient.Response;
-import org.asynchttpclient.providers.netty.NettyAsyncHttpProviderConfig;
-import org.asynchttpclient.Request;
-import org.eclipse.jetty.server.Connector;
-import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
+import org.asynchttpclient.async.AbstractBasicTest;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
-import org.testng.annotations.AfterMethod;
-import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import java.io.IOException;
-import java.net.ServerSocket;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -42,117 +42,69 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 
-import static org.testng.Assert.assertTrue;
+//FIXME there's no retry actually
+public class RetryNonBlockingIssue extends AbstractBasicTest {
 
-
-public class RetryNonBlockingIssue {
-
-    private URI servletEndpointUri;
-
-    private Server server;
-
-    private int port1;
-
-    public static int findFreePort() throws IOException {
-        ServerSocket socket = null;
-
-        try {
-            // 0 is open a socket on any free port
-            socket = new ServerSocket(0);
-            return socket.getLocalPort();
-        } finally {
-            if (socket != null) {
-                socket.close();
-            }
-        }
+    @Override
+    public AsyncHttpClient getAsyncHttpClient(AsyncHttpClientConfig config) {
+        return NettyProviderUtil.nettyProvider(config);
     }
 
-
-    @BeforeMethod
-    public void setUp() throws Exception {
-        server = new Server();
-
+    @BeforeClass(alwaysRun = true)
+    public void setUpGlobal() throws Exception {
         port1 = findFreePort();
+        server = newJettyHttpServer(port1);
 
-        Connector listener = new SelectChannelConnector();
-        listener.setHost("127.0.0.1");
-        listener.setPort(port1);
-
-        server.addConnector(listener);
-
-
-        ServletContextHandler context = new
-                ServletContextHandler(ServletContextHandler.SESSIONS);
-
+        ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
         context.setContextPath("/");
+        context.addServlet(new ServletHolder(new MockExceptionServlet()), "/*");
+
         server.setHandler(context);
-        context.addServlet(new ServletHolder(new
-                MockExceptionServlet()), "/*");
-
         server.start();
-
-        servletEndpointUri = new URI("http://127.0.0.1:" + port1 + "/");
     }
 
-    @AfterMethod
-    public void stop() {
-
-        try {
-            if (server != null) server.stop();
-        } catch (Exception e) {
-        }
-
-
+    protected String getTargetUrl() {
+        return String.format("http://127.0.0.1:%d/", port1);
     }
 
-    private ListenableFuture<Response> testMethodRequest(AsyncHttpClient
-            fetcher, int requests, String action, String id) throws IOException {
-        RequestBuilder builder = new RequestBuilder("GET");
-        builder.addQueryParameter(action, "1");
-
-        builder.addQueryParameter("maxRequests", "" + requests);
-        builder.addQueryParameter("id", id);
-        builder.setUrl(servletEndpointUri.toString());
-        Request r = builder.build();
-        return fetcher.executeRequest(r);
-
+    private ListenableFuture<Response> testMethodRequest(AsyncHttpClient client, int requests, String action, String id) throws IOException {
+        Request r = new RequestBuilder("GET")//
+                .setUrl(getTargetUrl())//
+                .addQueryParam(action, "1")//
+                .addQueryParam("maxRequests", "" + requests)//
+                .addQueryParam("id", id)//
+                .build();
+        return client.executeRequest(r);
     }
 
     /**
      * Tests that a head request can be made
-     *
+     * 
      * @throws IOException
      * @throws ExecutionException
      * @throws InterruptedException
      */
     @Test
-    public void testRetryNonBlocking() throws IOException, InterruptedException,
-            ExecutionException {
-        AsyncHttpClient c = null;
-        List<ListenableFuture<Response>> res = new
-                ArrayList<ListenableFuture<Response>>();
+    public void testRetryNonBlocking() throws IOException, InterruptedException, ExecutionException {
+
+        AsyncHttpClientConfig config = new AsyncHttpClientConfig.Builder()//
+                .setAllowPoolingConnections(true)//
+                .setMaxConnections(100)//
+                .setConnectionTimeout(60000)//
+                .setRequestTimeout(30000)//
+                .build();
+
+        AsyncHttpClient client = getAsyncHttpClient(config);
         try {
-            AsyncHttpClientConfig.Builder bc =
-                    new AsyncHttpClientConfig.Builder();
-
-            bc.setAllowPoolingConnection(true);
-            bc.setMaximumConnectionsTotal(100);
-            bc.setConnectionTimeoutInMs(60000);
-            bc.setRequestTimeoutInMs(30000);
-
-            NettyAsyncHttpProviderConfig config = new
-                    NettyAsyncHttpProviderConfig();
-
-            bc.setAsyncHttpClientProviderConfig(config);
-            c = new AsyncHttpClient(bc.build());
-
+            List<ListenableFuture<Response>> res = new ArrayList<ListenableFuture<Response>>();
             for (int i = 0; i < 32; i++) {
-                res.add(testMethodRequest(c, 3, "servlet", UUID.randomUUID().toString()));
+                res.add(testMethodRequest(client, 3, "servlet", UUID.randomUUID().toString()));
             }
 
             StringBuilder b = new StringBuilder();
             for (ListenableFuture<Response> r : res) {
                 Response theres = r.get();
+                assertEquals(200, theres.getStatusCode());
                 b.append("==============\r\n");
                 b.append("Response Headers\r\n");
                 Map<String, List<String>> heads = theres.getHeaders();
@@ -163,37 +115,33 @@ public class RetryNonBlockingIssue {
             System.out.println(b.toString());
             System.out.flush();
 
-        }
-        finally {
-            if (c != null) c.close();
+        } finally {
+            client.close();
         }
     }
 
     @Test
-    public void testRetryNonBlockingAsyncConnect() throws IOException, InterruptedException,
-            ExecutionException {
-        AsyncHttpClient c = null;
-        List<ListenableFuture<Response>> res = new
-                ArrayList<ListenableFuture<Response>>();
+    public void testRetryNonBlockingAsyncConnect() throws IOException, InterruptedException, ExecutionException {
+
+        AsyncHttpClientConfig config = new AsyncHttpClientConfig.Builder()//
+                .setAllowPoolingConnections(true)//
+                .setMaxConnections(100)//
+                .setConnectionTimeout(60000)//
+                .setRequestTimeout(30000)//
+                .build();
+
+        AsyncHttpClient client = getAsyncHttpClient(config);
+
         try {
-            AsyncHttpClientConfig.Builder bc =
-                    new AsyncHttpClientConfig.Builder();
-
-            bc.setAllowPoolingConnection(true);
-            bc.setMaximumConnectionsTotal(100);
-            bc.setConnectionTimeoutInMs(60000);
-            bc.setRequestTimeoutInMs(30000);
-            bc.setAsyncConnectMode(true);
-
-            c = new AsyncHttpClient(bc.build());
-
+            List<ListenableFuture<Response>> res = new ArrayList<ListenableFuture<Response>>();
             for (int i = 0; i < 32; i++) {
-                res.add(testMethodRequest(c, 3, "servlet", UUID.randomUUID().toString()));
+                res.add(testMethodRequest(client, 3, "servlet", UUID.randomUUID().toString()));
             }
 
             StringBuilder b = new StringBuilder();
             for (ListenableFuture<Response> r : res) {
                 Response theres = r.get();
+                assertEquals(theres.getStatusCode(), 200);
                 b.append("==============\r\n");
                 b.append("Response Headers\r\n");
                 Map<String, List<String>> heads = theres.getHeaders();
@@ -204,63 +152,15 @@ public class RetryNonBlockingIssue {
             System.out.println(b.toString());
             System.out.flush();
 
-        }
-        finally {
-            if (c != null) c.close();
-        }
-    }
-
-    @Test
-    public void testRetryBlocking() throws IOException, InterruptedException,
-            ExecutionException {
-        AsyncHttpClient c = null;
-        List<ListenableFuture<Response>> res = new
-                ArrayList<ListenableFuture<Response>>();
-        try {
-            AsyncHttpClientConfig.Builder bc =
-                    new AsyncHttpClientConfig.Builder();
-
-            bc.setAllowPoolingConnection(true);
-            bc.setMaximumConnectionsTotal(100);
-            bc.setConnectionTimeoutInMs(30000);
-            bc.setRequestTimeoutInMs(30000);
-
-            NettyAsyncHttpProviderConfig config = new
-                    NettyAsyncHttpProviderConfig();
-            config.setUseBlockingIO(true);
-
-            bc.setAsyncHttpClientProviderConfig(config);
-            c = new AsyncHttpClient(bc.build());
-
-            for (int i = 0; i < 32; i++) {
-                res.add(testMethodRequest(c, 3, "servlet", UUID.randomUUID().toString()));
-            }
-
-            StringBuilder b = new StringBuilder();
-            for (ListenableFuture<Response> r : res) {
-                Response theres = r.get();
-                b.append("==============\r\n");
-                b.append("Response Headers\r\n");
-                Map<String, List<String>> heads = theres.getHeaders();
-                b.append(heads + "\r\n");
-                b.append("==============\r\n");
-                assertTrue(heads.size() > 0);
-
-            }
-            System.out.println(b.toString());
-            System.out.flush();
-
-        }
-        finally {
-            if (c != null) c.close();
+        } finally {
+            client.close();
         }
     }
 
     @SuppressWarnings("serial")
     public class MockExceptionServlet extends HttpServlet {
 
-        private Map<String, Integer> requests = new
-                ConcurrentHashMap<String, Integer>();
+        private Map<String, Integer> requests = new ConcurrentHashMap<String, Integer>();
 
         private synchronized int increment(String id) {
             int val = 0;
@@ -276,14 +176,12 @@ public class RetryNonBlockingIssue {
             return val;
         }
 
-        public void service(HttpServletRequest req, HttpServletResponse res)
-                throws ServletException, IOException {
+        public void service(HttpServletRequest req, HttpServletResponse res) throws ServletException, IOException {
             String maxRequests = req.getParameter("maxRequests");
             int max = 0;
             try {
                 max = Integer.parseInt(maxRequests);
-            }
-            catch (NumberFormatException e) {
+            } catch (NumberFormatException e) {
                 max = 3;
             }
             String id = req.getParameter("id");
@@ -291,7 +189,6 @@ public class RetryNonBlockingIssue {
             String servlet = req.getParameter("servlet");
             String io = req.getParameter("io");
             String error = req.getParameter("500");
-
 
             if (requestNo >= max) {
                 res.setHeader("Success-On-Attempt", "" + requestNo);
@@ -304,26 +201,25 @@ public class RetryNonBlockingIssue {
                     res.setHeader("type", "io");
                 res.setStatus(200);
                 res.setContentLength(0);
+                res.flushBuffer();
                 return;
             }
-
 
             res.setStatus(200);
             res.setContentLength(100);
             res.setContentType("application/octet-stream");
-
             res.flushBuffer();
 
+            // error after flushing the status
             if (servlet != null && servlet.trim().length() > 0)
                 throw new ServletException("Servlet Exception");
 
             if (io != null && io.trim().length() > 0)
                 throw new IOException("IO Exception");
 
-            if (error != null && error.trim().length() > 0)
+            if (error != null && error.trim().length() > 0) {
                 res.sendError(500, "servlet process was 500");
+            }
         }
-
     }
 }
-

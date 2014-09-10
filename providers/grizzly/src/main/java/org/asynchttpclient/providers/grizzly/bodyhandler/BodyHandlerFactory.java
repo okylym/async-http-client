@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Sonatype, Inc. All rights reserved.
+ * Copyright (c) 2013-2014 Sonatype, Inc. All rights reserved.
  *
  * This program is licensed to you under the Apache License Version 2.0,
  * and you may not use this file except in compliance with the Apache License Version 2.0.
@@ -21,25 +21,26 @@ public final class BodyHandlerFactory {
     private final BodyHandler[] handlers;
 
     public BodyHandlerFactory(GrizzlyAsyncHttpProvider grizzlyAsyncHttpProvider) {
-        handlers = new BodyHandler[]{
-                new StringBodyHandler(grizzlyAsyncHttpProvider),
-                new ByteArrayBodyHandler(grizzlyAsyncHttpProvider),
-                new ParamsBodyHandler(grizzlyAsyncHttpProvider),
-                new EntityWriterBodyHandler(),
-                new StreamDataBodyHandler(),
-                new PartsBodyHandler(),
-                new FileBodyHandler(),
-                new BodyGeneratorBodyHandler()
+        handlers = new BodyHandler[] {//
+        new StringBodyHandler(grizzlyAsyncHttpProvider),//
+                new ByteArrayBodyHandler(grizzlyAsyncHttpProvider),//
+                new ParamsBodyHandler(grizzlyAsyncHttpProvider),//
+                new StreamDataBodyHandler(),//
+                new PartsBodyHandler(),//
+                new FileBodyHandler(grizzlyAsyncHttpProvider),//
+                new BodyGeneratorBodyHandler() //
         };
     }
 
     public BodyHandler getBodyHandler(final Request request) {
-        for (final BodyHandler h : handlers) {
+        for (int i = 0, len = handlers.length; i < len; i++) {
+            final BodyHandler h = handlers[i];
             if (h.handlesBodyType(request)) {
                 return h;
             }
         }
-        return new NoBodyHandler();
+        
+        return null;
     }
 
 } // END BodyHandlerFactory

@@ -12,15 +12,13 @@
  */
 package org.asynchttpclient.providers.netty;
 
-import org.asynchttpclient.providers.netty.NettyAsyncHttpProviderConfig;
-import org.testng.annotations.Test;
-
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
 import org.asynchttpclient.AsyncHttpProviderConfig;
 import org.asynchttpclient.async.AsyncProvidersBasicTest;
 
-@Test
+import io.netty.channel.ChannelOption;
+
 public class NettyAsyncProviderBasicTest extends AsyncProvidersBasicTest {
 
     @Override
@@ -29,9 +27,12 @@ public class NettyAsyncProviderBasicTest extends AsyncProvidersBasicTest {
     }
 
     @Override
-    protected AsyncHttpProviderConfig getProviderConfig() {
-        final NettyAsyncHttpProviderConfig config = new NettyAsyncHttpProviderConfig();
-        config.addProperty("tcpNoDelay", true);
-        return config;
+    protected AsyncHttpProviderConfig<?, ?> getProviderConfig() {
+        return new NettyAsyncHttpProviderConfig().addChannelOption(ChannelOption.TCP_NODELAY, Boolean.TRUE);
+    }
+
+    @Override
+    protected String acceptEncodingHeader() {
+        return "gzip,deflate";
     }
 }

@@ -12,12 +12,11 @@
  */
 package org.asynchttpclient.async;
 
-import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.Request;
-import org.asynchttpclient.RequestBuilder;
-import org.asynchttpclient.Response;
-import org.asynchttpclient.webdav.WebDavCompletionHandlerBase;
-import org.asynchttpclient.webdav.WebDavResponse;
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertTrue;
+
 import org.apache.catalina.Context;
 import org.apache.catalina.Engine;
 import org.apache.catalina.Host;
@@ -25,6 +24,12 @@ import org.apache.catalina.Wrapper;
 import org.apache.catalina.connector.Connector;
 import org.apache.catalina.startup.Embedded;
 import org.apache.coyote.http11.Http11NioProtocol;
+import org.asynchttpclient.AsyncHttpClient;
+import org.asynchttpclient.Request;
+import org.asynchttpclient.RequestBuilder;
+import org.asynchttpclient.Response;
+import org.asynchttpclient.webdav.WebDavCompletionHandlerBase;
+import org.asynchttpclient.webdav.WebDavResponse;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeClass;
@@ -34,13 +39,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNotNull;
-import static org.testng.Assert.assertTrue;
-
 public abstract class WebDavBasicTest extends AbstractBasicTest {
 
-    public Embedded embedded;
+    protected Embedded embedded;
 
     @BeforeClass(alwaysRun = true)
     public void setUpGlobal() throws Exception {
@@ -76,21 +77,25 @@ public abstract class WebDavBasicTest extends AbstractBasicTest {
         embedded.start();
     }
 
+    @AfterClass(alwaysRun = true)
+    public void tearDownGlobal() throws InterruptedException, Exception {
+        embedded.stop();
+    }
+
     protected String getTargetUrl() {
         return String.format("http://127.0.0.1:%s/folder1", port1);
     }
 
     @AfterMethod(alwaysRun = true)
+    // FIXME not sure that's threadsafe
     public void clean() throws InterruptedException, Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
-
-        Request deleteRequest = new RequestBuilder("DELETE").setUrl(getTargetUrl()).build();
-        c.executeRequest(deleteRequest).get();
-    }
-
-    @AfterClass(alwaysRun = true)
-    public void tearDownGlobal() throws InterruptedException, Exception {
-        embedded.stop();
+        try {
+            Request deleteRequest = new RequestBuilder("DELETE").setUrl(getTargetUrl()).build();
+            c.executeRequest(deleteRequest).get();
+        } finally {
+            c.close();
+        }
     }
 
     @Test(groups = { "standalone", "default_provider" })
@@ -171,7 +176,7 @@ public abstract class WebDavBasicTest extends AbstractBasicTest {
                 /**
                  * {@inheritDoc}
                  */
-                /* @Override */
+                @Override
                 public void onThrowable(Throwable t) {
 
                     t.printStackTrace();
@@ -189,5 +194,4 @@ public abstract class WebDavBasicTest extends AbstractBasicTest {
             c.close();
         }
     }
-
 }

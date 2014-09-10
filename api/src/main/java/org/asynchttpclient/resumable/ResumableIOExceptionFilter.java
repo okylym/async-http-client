@@ -16,22 +16,18 @@ import org.asynchttpclient.Request;
 import org.asynchttpclient.filter.FilterContext;
 import org.asynchttpclient.filter.FilterException;
 import org.asynchttpclient.filter.IOExceptionFilter;
-import org.asynchttpclient.filter.FilterException;
-import org.asynchttpclient.filter.IOExceptionFilter;
 
 /**
- * Simple {@link org.asynchttpclient.filter.IOExceptionFilter} that replay the current {@link org.asynchttpclient.Request} using
- * a {@link ResumableAsyncHandler}
+ * Simple {@link org.asynchttpclient.filter.IOExceptionFilter} that replay the current {@link org.asynchttpclient.Request} using a {@link ResumableAsyncHandler}
  */
 public class ResumableIOExceptionFilter implements IOExceptionFilter {
-    public FilterContext filter(FilterContext ctx) throws FilterException {
-        if (ctx.getIOException() != null && ResumableAsyncHandler.class.isAssignableFrom(ctx.getAsyncHandler().getClass())) {
+    public <T> FilterContext<T> filter(FilterContext<T> ctx) throws FilterException {
+        if (ctx.getIOException() != null && ctx.getAsyncHandler() instanceof ResumableAsyncHandler) {
 
             Request request = ResumableAsyncHandler.class.cast(ctx.getAsyncHandler()).adjustRequestRange(ctx.getRequest());
 
-            return new FilterContext.FilterContextBuilder(ctx).request(request).replayRequest(true).build();
+            return new FilterContext.FilterContextBuilder<T>(ctx).request(request).replayRequest(true).build();
         }
         return ctx;
     }
 }
-    

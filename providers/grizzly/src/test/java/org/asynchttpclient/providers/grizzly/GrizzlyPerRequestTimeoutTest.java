@@ -23,12 +23,11 @@ public class GrizzlyPerRequestTimeoutTest extends PerRequestTimeoutTest {
 
     @Override
     protected void checkTimeoutMessage(String message) {
-        assertEquals("Timeout exceeded", message);
+        assertEquals(message, "Timeout exceeded");
     }
 
     @Override
     public AsyncHttpClient getAsyncHttpClient(AsyncHttpClientConfig config) {
         return GrizzlyProviderUtil.grizzlyProvider(config);
     }
-
 }

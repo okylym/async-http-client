@@ -12,71 +12,38 @@
  */
 package org.asynchttpclient.websocket;
 
-import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.websocket.WebSocket;
-import org.asynchttpclient.websocket.WebSocketListener;
-import org.asynchttpclient.websocket.WebSocketTextListener;
-import org.asynchttpclient.websocket.WebSocketUpgradeHandler;
-import org.testng.annotations.Test;
-
-import javax.servlet.http.HttpServletRequest;
-import java.io.IOException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicReference;
-
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
+import org.asynchttpclient.AsyncHttpClient;
+import org.eclipse.jetty.websocket.server.WebSocketHandler;
+import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
+import org.testng.annotations.Test;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
+
 public abstract class TextMessageTest extends AbstractBasicTest {
-
-    public static final class EchoTextWebSocket implements org.eclipse.jetty.websocket.WebSocket, org.eclipse.jetty.websocket.WebSocket.OnTextMessage {
-
-        private Connection connection;
-
-        @Override
-        public void onOpen(Connection connection) {
-            this.connection = connection;
-            connection.setMaxTextMessageSize(1000);
-        }
-
-        @Override
-        public void onClose(int i, String s) {
-            connection.close();
-        }
-
-        @Override
-        public void onMessage(String s) {
-            try {
-                connection.sendMessage(s);
-            } catch (IOException e) {
-                try {
-                    connection.sendMessage("FAIL");
-                } catch (IOException e1) {
-                    e1.printStackTrace();
-                }
-            }
-        }
-    }
 
     @Override
     public WebSocketHandler getWebSocketHandler() {
         return new WebSocketHandler() {
             @Override
-            public org.eclipse.jetty.websocket.WebSocket doWebSocketConnect(HttpServletRequest httpServletRequest, String s) {
-                return new EchoTextWebSocket();
+            public void configure(WebSocketServletFactory factory) {
+                factory.register(EchoSocket.class);
             }
         };
     }
 
     @Test(timeOut = 60000)
-    public void onOpen() throws Throwable {
+    public void onOpen() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             final CountDownLatch latch = new CountDownLatch(1);
             final AtomicReference<String> text = new AtomicReference<String>("");
 
-            /* WebSocket websocket = */c.prepareGet(getTargetUrl()).execute(new WebSocketUpgradeHandler.Builder().addWebSocketListener(new WebSocketListener() {
+            c.prepareGet(getTargetUrl()).execute(new WebSocketUpgradeHandler.Builder().addWebSocketListener(new WebSocketListener() {
 
                 @Override
                 public void onOpen(WebSocket websocket) {
@@ -103,7 +70,7 @@ public abstract class TextMessageTest extends AbstractBasicTest {
     }
 
     @Test(timeOut = 60000)
-    public void onEmptyListenerTest() throws Throwable {
+    public void onEmptyListenerTest() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             WebSocket websocket = null;
@@ -119,7 +86,7 @@ public abstract class TextMessageTest extends AbstractBasicTest {
     }
 
     @Test(timeOut = 60000)
-    public void onFailureTest() throws Throwable {
+    public void onFailureTest() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             Throwable t = null;
@@ -135,13 +102,13 @@ public abstract class TextMessageTest extends AbstractBasicTest {
     }
 
     @Test(timeOut = 60000)
-    public void onTimeoutCloseTest() throws Throwable {
+    public void onTimeoutCloseTest() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             final CountDownLatch latch = new CountDownLatch(1);
             final AtomicReference<String> text = new AtomicReference<String>("");
 
-            /* WebSocket websocket = */c.prepareGet(getTargetUrl()).execute(new WebSocketUpgradeHandler.Builder().addWebSocketListener(new WebSocketListener() {
+            c.prepareGet(getTargetUrl()).execute(new WebSocketUpgradeHandler.Builder().addWebSocketListener(new WebSocketListener() {
 
                 @Override
                 public void onOpen(WebSocket websocket) {
@@ -168,7 +135,7 @@ public abstract class TextMessageTest extends AbstractBasicTest {
     }
 
     @Test(timeOut = 60000)
-    public void onClose() throws Throwable {
+    public void onClose() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             final CountDownLatch latch = new CountDownLatch(1);
@@ -203,7 +170,7 @@ public abstract class TextMessageTest extends AbstractBasicTest {
     }
 
     @Test(timeOut = 60000)
-    public void echoText() throws Throwable {
+    public void echoText() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             final CountDownLatch latch = new CountDownLatch(1);
@@ -215,10 +182,6 @@ public abstract class TextMessageTest extends AbstractBasicTest {
                 public void onMessage(String message) {
                     text.set(message);
                     latch.countDown();
-                }
-
-                @Override
-                public void onFragment(String fragment, boolean last) {
                 }
 
                 @Override
@@ -237,7 +200,7 @@ public abstract class TextMessageTest extends AbstractBasicTest {
                 }
             }).build()).get();
 
-            websocket.sendTextMessage("ECHO");
+            websocket.sendMessage("ECHO");
 
             latch.await();
             assertEquals(text.get(), "ECHO");
@@ -247,7 +210,7 @@ public abstract class TextMessageTest extends AbstractBasicTest {
     }
 
     @Test(timeOut = 60000)
-    public void echoDoubleListenerText() throws Throwable {
+    public void echoDoubleListenerText() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             final CountDownLatch latch = new CountDownLatch(2);
@@ -259,10 +222,6 @@ public abstract class TextMessageTest extends AbstractBasicTest {
                 public void onMessage(String message) {
                     text.set(message);
                     latch.countDown();
-                }
-
-                @Override
-                public void onFragment(String fragment, boolean last) {
                 }
 
                 @Override
@@ -288,10 +247,6 @@ public abstract class TextMessageTest extends AbstractBasicTest {
                 }
 
                 @Override
-                public void onFragment(String fragment, boolean last) {
-                }
-
-                @Override
                 public void onOpen(WebSocket websocket) {
                 }
 
@@ -307,7 +262,7 @@ public abstract class TextMessageTest extends AbstractBasicTest {
                 }
             }).build()).get();
 
-            websocket.sendTextMessage("ECHO");
+            websocket.sendMessage("ECHO");
 
             latch.await();
             assertEquals(text.get(), "ECHOECHO");
@@ -317,7 +272,7 @@ public abstract class TextMessageTest extends AbstractBasicTest {
     }
 
     @Test
-    public void echoTwoMessagesTest() throws Throwable {
+    public void echoTwoMessagesTest() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             final CountDownLatch latch = new CountDownLatch(2);
@@ -332,12 +287,8 @@ public abstract class TextMessageTest extends AbstractBasicTest {
                 }
 
                 @Override
-                public void onFragment(String fragment, boolean last) {
-                }
-
-                @Override
                 public void onOpen(WebSocket websocket) {
-                    websocket.sendTextMessage("ECHO").sendTextMessage("ECHO");
+                    websocket.sendMessage("ECHO").sendMessage("ECHO");
                 }
 
                 @Override
@@ -359,7 +310,7 @@ public abstract class TextMessageTest extends AbstractBasicTest {
         }
     }
 
-    public void echoFragments() throws Throwable {
+    public void echoFragments() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             final CountDownLatch latch = new CountDownLatch(1);
@@ -374,10 +325,6 @@ public abstract class TextMessageTest extends AbstractBasicTest {
                 }
 
                 @Override
-                public void onFragment(String fragment, boolean last) {
-                }
-
-                @Override
                 public void onOpen(WebSocket websocket) {
                 }
 
@@ -393,8 +340,8 @@ public abstract class TextMessageTest extends AbstractBasicTest {
                 }
             }).build()).get();
 
-            websocket.streamText("ECHO", false);
-            websocket.streamText("ECHO", true);
+            websocket.stream("ECHO", false);
+            websocket.stream("ECHO", true);
 
             latch.await();
             assertEquals(text.get(), "ECHOECHO");
@@ -403,4 +350,47 @@ public abstract class TextMessageTest extends AbstractBasicTest {
         }
     }
 
+    @Test(timeOut = 60000)
+    public void echoTextAndThenClose() throws Throwable {
+        AsyncHttpClient c = getAsyncHttpClient(null);
+        try {
+            final CountDownLatch textLatch = new CountDownLatch(1);
+            final CountDownLatch closeLatch = new CountDownLatch(1);
+            final AtomicReference<String> text = new AtomicReference<String>("");
+
+            final WebSocket websocket = c.prepareGet(getTargetUrl()).execute(new WebSocketUpgradeHandler.Builder().addWebSocketListener(new WebSocketTextListener() {
+
+                @Override
+                public void onMessage(String message) {
+                    text.set(text.get() + message);
+                    textLatch.countDown();
+                }
+
+                @Override
+                public void onOpen(WebSocket websocket) {
+                }
+
+                @Override
+                public void onClose(WebSocket websocket) {
+                    closeLatch.countDown();
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    t.printStackTrace();
+                    closeLatch.countDown();
+                }
+            }).build()).get();
+
+            websocket.sendMessage("ECHO");
+            textLatch.await();
+
+            websocket.sendMessage("CLOSE");
+            closeLatch.await();
+
+            assertEquals(text.get(), "ECHO");
+        } finally {
+            c.close();
+        }
+    }
 }

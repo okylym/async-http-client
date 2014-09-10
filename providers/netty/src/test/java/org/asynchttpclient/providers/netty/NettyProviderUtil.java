@@ -17,20 +17,14 @@ package org.asynchttpclient.providers.netty;
 
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
+import org.asynchttpclient.DefaultAsyncHttpClient;
 
 public class NettyProviderUtil {
 
     public static AsyncHttpClient nettyProvider(AsyncHttpClientConfig config) {
-        // FIXME why do tests fail with this set up? Seems like we have a race condition
-        // if (config == null) {
-        // config = new AsyncHttpClientConfig.Builder().build();
-        // }
-        // return new AsyncHttpClient(new NettyAsyncHttpProvider(config), config);
-
         if (config == null) {
-            return new AsyncHttpClient();
-        } else {
-            return new AsyncHttpClient(config);
+            config = new AsyncHttpClientConfig.Builder().build();
         }
+        return new DefaultAsyncHttpClient(new NettyAsyncHttpProvider(config), config);
     }
 }

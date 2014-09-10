@@ -12,35 +12,35 @@
  */
 package org.asynchttpclient.async;
 
-import static org.testng.Assert.*;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.util.concurrent.Future;
+import org.asynchttpclient.Response;
+import org.asynchttpclient.SimpleAsyncHttpClient;
+import org.asynchttpclient.SimpleAsyncHttpClient.ErrorDocumentBehaviour;
+import org.asynchttpclient.consumers.OutputStreamBodyConsumer;
+import org.eclipse.jetty.server.handler.AbstractHandler;
+import org.testng.annotations.Test;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.testng.annotations.Test;
-
-import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.AsyncHttpClientConfig;
-import org.asynchttpclient.Response;
-import org.asynchttpclient.SimpleAsyncHttpClient;
-import org.asynchttpclient.SimpleAsyncHttpClient.ErrorDocumentBehaviour;
-import org.asynchttpclient.consumers.OutputStreamBodyConsumer;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.concurrent.Future;
 
 /**
  * @author Benjamin Hanzelmann
  * 
  */
-public class SimpleAsyncClientErrorBehaviourTest extends AbstractBasicTest {
+public abstract class SimpleAsyncClientErrorBehaviourTest extends AbstractBasicTest {
+    
+    public abstract String getProviderClass();
 
     @Test(groups = { "standalone", "default_provider" })
-    public void testAccumulateErrorBody() throws Throwable {
-        SimpleAsyncHttpClient client = new SimpleAsyncHttpClient.Builder().setUrl(getTargetUrl() + "/nonexistent").setErrorDocumentBehaviour(ErrorDocumentBehaviour.ACCUMULATE).build();
+    public void testAccumulateErrorBody() throws Exception {
+        SimpleAsyncHttpClient client = new SimpleAsyncHttpClient.Builder().setProviderClass(getProviderClass()).setUrl(getTargetUrl() + "/nonexistent").setErrorDocumentBehaviour(ErrorDocumentBehaviour.ACCUMULATE).build();
         try {
             ByteArrayOutputStream o = new ByteArrayOutputStream(10);
             Future<Response> future = client.get(new OutputStreamBodyConsumer(o));
@@ -56,8 +56,8 @@ public class SimpleAsyncClientErrorBehaviourTest extends AbstractBasicTest {
     }
 
     @Test(groups = { "standalone", "default_provider" })
-    public void testOmitErrorBody() throws Throwable {
-        SimpleAsyncHttpClient client = new SimpleAsyncHttpClient.Builder().setUrl(getTargetUrl() + "/nonexistent").setErrorDocumentBehaviour(ErrorDocumentBehaviour.OMIT).build();
+    public void testOmitErrorBody() throws Exception {
+        SimpleAsyncHttpClient client = new SimpleAsyncHttpClient.Builder().setProviderClass(getProviderClass()).setUrl(getTargetUrl() + "/nonexistent").setErrorDocumentBehaviour(ErrorDocumentBehaviour.OMIT).build();
         try {
             ByteArrayOutputStream o = new ByteArrayOutputStream(10);
             Future<Response> future = client.get(new OutputStreamBodyConsumer(o));
@@ -70,12 +70,6 @@ public class SimpleAsyncClientErrorBehaviourTest extends AbstractBasicTest {
         } finally {
             client.close();
         }
-    }
-
-    @Override
-    public AsyncHttpClient getAsyncHttpClient(AsyncHttpClientConfig config) {
-        // disabled
-        return null;
     }
 
     @Override

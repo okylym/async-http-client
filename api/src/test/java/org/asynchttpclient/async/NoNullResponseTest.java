@@ -16,16 +16,18 @@
  */
 package org.asynchttpclient.async;
 
+import static org.testng.Assert.assertNotNull;
+
 import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.AsyncHttpClient.BoundRequestBuilder;
 import org.asynchttpclient.AsyncHttpClientConfig;
+import org.asynchttpclient.BoundRequestBuilder;
 import org.asynchttpclient.Response;
-import org.testng.Assert;
 import org.testng.annotations.Test;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+
 import java.security.GeneralSecurityException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -34,28 +36,28 @@ public abstract class NoNullResponseTest extends AbstractBasicTest {
     private static final String GOOGLE_HTTPS_URL = "https://www.google.com";
 
     @Test(invocationCount = 4, groups = { "online", "default_provider" })
-    public void multipleSslRequestsWithDelayAndKeepAlive() throws Throwable {
+    public void multipleSslRequestsWithDelayAndKeepAlive() throws Exception {
         final AsyncHttpClient client = create();
         try {
             final BoundRequestBuilder builder = client.prepareGet(GOOGLE_HTTPS_URL);
             final Response response1 = builder.execute().get();
-            Thread.sleep(5000);
+            Thread.sleep(4000);
             final Response response2 = builder.execute().get();
             if (response2 != null) {
                 System.out.println("Success (2nd response was not null).");
             } else {
                 System.out.println("Failed (2nd response was null).");
             }
-            Assert.assertNotNull(response1);
-            Assert.assertNotNull(response2);
+            assertNotNull(response1);
+            assertNotNull(response2);
         } finally {
             client.close();
         }
     }
 
     private AsyncHttpClient create() throws GeneralSecurityException {
-        final AsyncHttpClientConfig.Builder configBuilder = new AsyncHttpClientConfig.Builder().setCompressionEnabled(true).setFollowRedirects(true).setSSLContext(getSSLContext()).setAllowPoolingConnection(true).setConnectionTimeoutInMs(10000)
-                .setIdleConnectionInPoolTimeoutInMs(60000).setRequestTimeoutInMs(10000).setMaximumConnectionsPerHost(-1).setMaximumConnectionsTotal(-1);
+        final AsyncHttpClientConfig.Builder configBuilder = new AsyncHttpClientConfig.Builder().setFollowRedirect(true).setSSLContext(getSSLContext()).setAllowPoolingConnections(true).setConnectionTimeout(10000)
+                .setPooledConnectionIdleTimeout(60000).setRequestTimeout(10000).setMaxConnectionsPerHost(-1).setMaxConnections(-1);
         return getAsyncHttpClient(configBuilder.build());
     }
 

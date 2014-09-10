@@ -15,6 +15,9 @@
  */
 package org.asynchttpclient.async;
 
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.FluentCaseInsensitiveStringsMap;
 import org.asynchttpclient.Response;
@@ -25,30 +28,41 @@ import org.testng.annotations.Test;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNotNull;
-
 public abstract class InputStreamTest extends AbstractBasicTest {
 
-    private class InputStreamHandler extends AbstractHandler {
+    private static class InputStreamHandler extends AbstractHandler {
         public void handle(String s, Request r, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
             if ("POST".equalsIgnoreCase(request.getMethod())) {
-                byte[] b = new byte[3];
-                request.getInputStream().read(b, 0, 3);
+                byte[] bytes = new byte[3];
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                int read = 0;
+                while (read > -1) {
+                    read = request.getInputStream().read(bytes);
+                    if (read > 0) {
+                        bos.write(bytes, 0, read);
+                    }
+                }
 
                 response.setStatus(HttpServletResponse.SC_OK);
-                response.addHeader("X-Param", new String(b));
+                response.addHeader("X-Param", new String(bos.toByteArray()));
             } else { // this handler is to handle POST request
                 response.sendError(HttpServletResponse.SC_FORBIDDEN);
             }
             response.getOutputStream().flush();
             response.getOutputStream().close();
         }
+    }
+
+    @Override
+    public AbstractHandler configureHandler() throws Exception {
+        return new InputStreamHandler();
     }
 
     @Test(groups = { "standalone", "default_provider" })
@@ -80,7 +94,6 @@ public abstract class InputStreamTest extends AbstractBasicTest {
                     } else {
                         return -1;
                     }
-
                 }
             };
 
@@ -91,10 +104,5 @@ public abstract class InputStreamTest extends AbstractBasicTest {
         } finally {
             c.close();
         }
-    }
-
-    @Override
-    public AbstractHandler configureHandler() throws Exception {
-        return new InputStreamHandler();
     }
 }

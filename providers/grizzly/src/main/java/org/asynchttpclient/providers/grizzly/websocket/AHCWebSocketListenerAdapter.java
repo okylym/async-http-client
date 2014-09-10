@@ -19,8 +19,8 @@ import org.asynchttpclient.websocket.WebSocketListener;
 import org.asynchttpclient.websocket.WebSocketPingListener;
 import org.asynchttpclient.websocket.WebSocketPongListener;
 import org.asynchttpclient.websocket.WebSocketTextListener;
+import org.glassfish.grizzly.websockets.ClosingFrame;
 import org.glassfish.grizzly.websockets.DataFrame;
-import org.glassfish.grizzly.websockets.draft06.ClosingFrame;
 
 import java.io.ByteArrayOutputStream;
 
@@ -33,9 +33,7 @@ final class AHCWebSocketListenerAdapter implements org.glassfish.grizzly.websock
 
     // -------------------------------------------------------- Constructors
 
-
-    public AHCWebSocketListenerAdapter(final WebSocketListener ahcListener,
-                                       final GrizzlyWebSocketAdapter webSocket) {
+    public AHCWebSocketListenerAdapter(final WebSocketListener ahcListener, final GrizzlyWebSocketAdapter webSocket) {
         this.ahcListener = ahcListener;
         this.webSocket = webSocket;
         if (webSocket.bufferFragments) {
@@ -47,14 +45,12 @@ final class AHCWebSocketListenerAdapter implements org.glassfish.grizzly.websock
         }
     }
 
-
     // ------------------------------ Methods from Grizzly WebSocketListener
-
 
     @Override
     public void onClose(org.glassfish.grizzly.websockets.WebSocket gWebSocket, DataFrame dataFrame) {
         try {
-            if (WebSocketCloseCodeReasonListener.class.isAssignableFrom(ahcListener.getClass())) {
+            if (ahcListener instanceof WebSocketCloseCodeReasonListener) {
                 ClosingFrame cf = ClosingFrame.class.cast(dataFrame);
                 WebSocketCloseCodeReasonListener.class.cast(ahcListener).onClose(webSocket, cf.getCode(), cf.getReason());
             } else {
@@ -77,7 +73,7 @@ final class AHCWebSocketListenerAdapter implements org.glassfish.grizzly.websock
     @Override
     public void onMessage(org.glassfish.grizzly.websockets.WebSocket webSocket, String s) {
         try {
-            if (WebSocketTextListener.class.isAssignableFrom(ahcListener.getClass())) {
+            if (ahcListener instanceof WebSocketTextListener) {
                 WebSocketTextListener.class.cast(ahcListener).onMessage(s);
             }
         } catch (Throwable e) {
@@ -88,7 +84,7 @@ final class AHCWebSocketListenerAdapter implements org.glassfish.grizzly.websock
     @Override
     public void onMessage(org.glassfish.grizzly.websockets.WebSocket webSocket, byte[] bytes) {
         try {
-            if (WebSocketByteListener.class.isAssignableFrom(ahcListener.getClass())) {
+            if (ahcListener instanceof WebSocketByteListener) {
                 WebSocketByteListener.class.cast(ahcListener).onMessage(bytes);
             }
         } catch (Throwable e) {
@@ -99,7 +95,7 @@ final class AHCWebSocketListenerAdapter implements org.glassfish.grizzly.websock
     @Override
     public void onPing(org.glassfish.grizzly.websockets.WebSocket webSocket, byte[] bytes) {
         try {
-            if (WebSocketPingListener.class.isAssignableFrom(ahcListener.getClass())) {
+            if (ahcListener instanceof WebSocketPingListener) {
                 WebSocketPingListener.class.cast(ahcListener).onPing(bytes);
             }
         } catch (Throwable e) {
@@ -110,7 +106,7 @@ final class AHCWebSocketListenerAdapter implements org.glassfish.grizzly.websock
     @Override
     public void onPong(org.glassfish.grizzly.websockets.WebSocket webSocket, byte[] bytes) {
         try {
-            if (WebSocketPongListener.class.isAssignableFrom(ahcListener.getClass())) {
+            if (ahcListener instanceof WebSocketPongListener) {
                 WebSocketPongListener.class.cast(ahcListener).onPong(bytes);
             }
         } catch (Throwable e) {
@@ -125,16 +121,12 @@ final class AHCWebSocketListenerAdapter implements org.glassfish.grizzly.websock
                 synchronized (this.webSocket) {
                     stringBuffer.append(s);
                     if (last) {
-                        if (WebSocketTextListener.class.isAssignableFrom(ahcListener.getClass())) {
+                        if (ahcListener instanceof WebSocketTextListener) {
                             final String message = stringBuffer.toString();
                             stringBuffer.setLength(0);
                             WebSocketTextListener.class.cast(ahcListener).onMessage(message);
                         }
                     }
-                }
-            } else {
-                if (WebSocketTextListener.class.isAssignableFrom(ahcListener.getClass())) {
-                    WebSocketTextListener.class.cast(ahcListener).onFragment(s, last);
                 }
             }
         } catch (Throwable e) {
@@ -149,16 +141,12 @@ final class AHCWebSocketListenerAdapter implements org.glassfish.grizzly.websock
                 synchronized (this.webSocket) {
                     byteArrayOutputStream.write(bytes);
                     if (last) {
-                        if (WebSocketByteListener.class.isAssignableFrom(ahcListener.getClass())) {
+                        if (ahcListener instanceof WebSocketByteListener) {
                             final byte[] bytesLocal = byteArrayOutputStream.toByteArray();
                             byteArrayOutputStream.reset();
                             WebSocketByteListener.class.cast(ahcListener).onMessage(bytesLocal);
                         }
                     }
-                }
-            } else {
-                if (WebSocketByteListener.class.isAssignableFrom(ahcListener.getClass())) {
-                    WebSocketByteListener.class.cast(ahcListener).onFragment(bytes, last);
                 }
             }
         } catch (Throwable e) {
@@ -168,8 +156,10 @@ final class AHCWebSocketListenerAdapter implements org.glassfish.grizzly.websock
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         AHCWebSocketListenerAdapter that = (AHCWebSocketListenerAdapter) o;
 

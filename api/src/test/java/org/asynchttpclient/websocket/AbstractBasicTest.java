@@ -12,96 +12,34 @@
  */
 package org.asynchttpclient.websocket;
 
-import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.AsyncHttpClientConfig;
-import org.eclipse.jetty.server.Request;
-import org.eclipse.jetty.server.Server;
-import org.eclipse.jetty.server.handler.HandlerWrapper;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
-import org.eclipse.jetty.websocket.WebSocketFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
+import static org.asynchttpclient.async.util.TestUtils.newJettyHttpServer;
+
+import org.eclipse.jetty.websocket.server.WebSocketHandler;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.net.ServerSocket;
+public abstract class AbstractBasicTest extends org.asynchttpclient.async.AbstractBasicTest {
 
-public abstract class AbstractBasicTest extends Server {
+    @BeforeClass(alwaysRun = true)
+    public void setUpGlobal() throws Exception {
 
-    public abstract class WebSocketHandler extends HandlerWrapper implements WebSocketFactory.Acceptor {
-        private final WebSocketFactory _webSocketFactory = new WebSocketFactory(this, 32 * 1024);
+        port1 = findFreePort();
+        server = newJettyHttpServer(port1);
+        server.setHandler(getWebSocketHandler());
 
-        public WebSocketHandler(){
-            _webSocketFactory.setMaxIdleTime(10000);
-        }
-
-        public WebSocketFactory getWebSocketFactory() {
-            return _webSocketFactory;
-        }
-
-        /* ------------------------------------------------------------ */
-        @Override
-        public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-            if (_webSocketFactory.acceptWebSocket(request, response) || response.isCommitted())
-                return;
-            super.handle(target, baseRequest, request, response);
-        }
-
-        /* ------------------------------------------------------------ */
-        public boolean checkOrigin(HttpServletRequest request, String origin) {
-            return true;
-        }
-
+        server.start();
+        logger.info("Local HTTP server started successfully");
     }
-
-    protected final Logger log = LoggerFactory.getLogger(AbstractBasicTest.class);
-    protected int port1;
-    SelectChannelConnector _connector;
 
     @AfterClass(alwaysRun = true)
     public void tearDownGlobal() throws Exception {
-        stop();
-    }
-
-    protected int findFreePort() throws IOException {
-        ServerSocket socket = null;
-
-        try {
-            socket = new ServerSocket(0);
-
-            return socket.getLocalPort();
-        } finally {
-            if (socket != null) {
-                socket.close();
-            }
-        }
+        server.stop();
     }
 
     protected String getTargetUrl() {
         return String.format("ws://127.0.0.1:%d/", port1);
     }
 
-    @BeforeClass(alwaysRun = true)
-    public void setUpGlobal() throws Exception {
-        port1 = findFreePort();
-        _connector = new SelectChannelConnector();
-        _connector.setPort(port1);
-
-        addConnector(_connector);
-        WebSocketHandler _wsHandler = getWebSocketHandler();
-
-        setHandler(_wsHandler);
-
-        start();
-        log.info("Local HTTP server started successfully");
-    }
-
-    public abstract WebSocketHandler getWebSocketHandler() ;
-
-    public abstract AsyncHttpClient getAsyncHttpClient(AsyncHttpClientConfig config);
-
+    public abstract WebSocketHandler getWebSocketHandler();
 }

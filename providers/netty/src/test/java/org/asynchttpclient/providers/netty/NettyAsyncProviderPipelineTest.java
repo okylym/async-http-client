@@ -14,19 +14,7 @@
 package org.asynchttpclient.providers.netty;
 
 import static org.testng.Assert.assertEquals;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import org.asynchttpclient.providers.netty.NettyAsyncHttpProvider;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelHandler;
-import org.jboss.netty.handler.codec.http.HttpMessage;
-import org.testng.Assert;
-import org.testng.annotations.Test;
+import static org.testng.Assert.fail;
 
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
@@ -34,17 +22,37 @@ import org.asynchttpclient.Request;
 import org.asynchttpclient.RequestBuilder;
 import org.asynchttpclient.Response;
 import org.asynchttpclient.async.AbstractBasicTest;
+import org.asynchttpclient.providers.netty.NettyAsyncHttpProviderConfig.AdditionalChannelInitializer;
+import org.testng.annotations.Test;
+
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.codec.http.HttpMessage;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class NettyAsyncProviderPipelineTest extends AbstractBasicTest {
 
     @Override
     public AsyncHttpClient getAsyncHttpClient(AsyncHttpClientConfig config) {
-        return new AsyncHttpClient(new CopyEncodingNettyAsyncHttpProvider(config), config);
+        return NettyProviderUtil.nettyProvider(config);
     }
 
     @Test(groups = { "standalone", "netty_provider" })
-    public void asyncPipelineTest() throws Throwable {
-        AsyncHttpClient p = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setCompressionEnabled(true).build());
+    public void asyncPipelineTest() throws Exception {
+
+        NettyAsyncHttpProviderConfig nettyConfig = new NettyAsyncHttpProviderConfig();
+        nettyConfig.setHttpAdditionalChannelInitializer(new AdditionalChannelInitializer() {
+            public void initChannel(Channel ch) throws Exception {
+                // super.initPlainChannel(ch);
+                ch.pipeline().addBefore("inflater", "copyEncodingHeader", new CopyEncodingHandler());
+            }
+        });
+        AsyncHttpClient p = getAsyncHttpClient(new AsyncHttpClientConfig.Builder()
+                .setAsyncHttpClientProviderConfig(nettyConfig).build());
+
         try {
             final CountDownLatch l = new CountDownLatch(1);
             Request request = new RequestBuilder("GET").setUrl(getTargetUrl()).build();
@@ -61,42 +69,24 @@ public class NettyAsyncProviderPipelineTest extends AbstractBasicTest {
                 }
             }).get();
             if (!l.await(TIMEOUT, TimeUnit.SECONDS)) {
-                Assert.fail("Timeout out");
+                fail("Timeout out");
             }
         } finally {
             p.close();
         }
     }
 
-    private static class CopyEncodingNettyAsyncHttpProvider extends
-            NettyAsyncHttpProvider {
-        public CopyEncodingNettyAsyncHttpProvider(AsyncHttpClientConfig config) {
-            super(config);
-        }
-
-        protected ChannelPipelineFactory createPlainPipelineFactory() {
-            final ChannelPipelineFactory pipelineFactory = super.createPlainPipelineFactory();
-            return new ChannelPipelineFactory() {
-                public ChannelPipeline getPipeline() throws Exception {
-                    ChannelPipeline pipeline = pipelineFactory.getPipeline();
-                    pipeline.addBefore("inflater", "copyEncodingHeader", new CopyEncodingHandler());
-                    return pipeline;
-                }
-            };
-        }
-    }
-
-    private static class CopyEncodingHandler extends SimpleChannelHandler {
+    private static class CopyEncodingHandler extends ChannelInboundHandlerAdapter {
         @Override
-        public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) {
-            Object msg = e.getMessage();
-            if (msg instanceof HttpMessage) {
-                HttpMessage m = (HttpMessage) msg;
-                // for test there is no Content-Encoding header so just hard coding value
+        public void channelRead(ChannelHandlerContext ctx, Object e) {
+            if (e instanceof HttpMessage) {
+                HttpMessage m = (HttpMessage) e;
+                // for test there is no Content-Encoding header so just hard
+                // coding value
                 // for verification
-                m.setHeader("X-Original-Content-Encoding", "<original encoding>");
+                m.headers().set("X-Original-Content-Encoding", "<original encoding>");
             }
-            ctx.sendUpstream(e);
+            ctx.fireChannelRead(e);
         }
     }
 }

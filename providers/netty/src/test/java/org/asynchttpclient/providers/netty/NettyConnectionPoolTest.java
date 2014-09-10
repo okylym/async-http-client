@@ -1,29 +1,31 @@
 /*
- * Copyright (c) 2010-2012 Sonatype, Inc. All rights reserved.
- *
- * This program is licensed to you under the Apache License Version 2.0,
- * and you may not use this file except in compliance with the Apache License Version 2.0.
- * You may obtain a copy of the Apache License Version 2.0 at http://www.apache.org/licenses/LICENSE-2.0.
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the Apache License Version 2.0 is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the Apache License Version 2.0 for the specific language governing permissions and limitations there under.
+ * Copyright (c) 2010-2012 Sonatype, Inc. All rights reserved. This program is licensed to you under the Apache License
+ * Version 2.0, and you may not use this file except in compliance with the Apache License Version 2.0. You may obtain a
+ * copy of the Apache License Version 2.0 at http://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable
+ * law or agreed to in writing, software distributed under the Apache License Version 2.0 is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the Apache License Version 2.0
+ * for the specific language governing permissions and limitations there under.
  */
 package org.asynchttpclient.providers.netty;
 
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
+import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.fail;
+import io.netty.channel.Channel;
 
+import java.net.ConnectException;
 import java.util.concurrent.TimeUnit;
-
-import org.jboss.netty.channel.Channel;
 
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
-import org.asynchttpclient.ConnectionsPool;
+import org.asynchttpclient.Response;
 import org.asynchttpclient.async.ConnectionPoolTest;
+import org.asynchttpclient.providers.netty.channel.pool.ChannelPool;
+import org.asynchttpclient.providers.netty.channel.pool.NoopChannelPool;
+import org.testng.annotations.Test;
 
 public class NettyConnectionPoolTest extends ConnectionPoolTest {
 
@@ -32,32 +34,25 @@ public class NettyConnectionPoolTest extends ConnectionPoolTest {
         return NettyProviderUtil.nettyProvider(config);
     }
 
-    @Override
+    @Test(groups = { "standalone", "default_provider" })
     public void testInvalidConnectionsPool() {
-        ConnectionsPool<String, Channel> cp = new ConnectionsPool<String, Channel>() {
+        ChannelPool cp = new NoopChannelPool() {
 
-            public boolean offer(String key, Channel connection) {
+            @Override
+            public boolean offer(Channel connection, String poolKey) {
                 return false;
             }
 
-            public Channel poll(String connection) {
-                return null;
-            }
-
-            public boolean removeAll(Channel connection) {
+            @Override
+            public boolean isOpen() {
                 return false;
-            }
-
-            public boolean canCacheConnection() {
-                return false;
-            }
-
-            public void destroy() {
-
             }
         };
 
-        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setConnectionsPool(cp).build());
+        NettyAsyncHttpProviderConfig providerConfig = new NettyAsyncHttpProviderConfig();
+        providerConfig.setChannelPool(cp);
+        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setAsyncHttpClientProviderConfig(providerConfig)
+                .build());
         try {
             Exception exception = null;
             try {
@@ -73,32 +68,20 @@ public class NettyConnectionPoolTest extends ConnectionPoolTest {
         }
     }
 
-    @Override
+    @Test(groups = { "standalone", "default_provider" })
     public void testValidConnectionsPool() {
-        ConnectionsPool<String, Channel> cp = new ConnectionsPool<String, Channel>() {
+        ChannelPool cp = new NoopChannelPool() {
 
-            public boolean offer(String key, Channel connection) {
+            @Override
+            public boolean offer(Channel connection, String poolKey) {
                 return true;
-            }
-
-            public Channel poll(String connection) {
-                return null;
-            }
-
-            public boolean removeAll(Channel connection) {
-                return false;
-            }
-
-            public boolean canCacheConnection() {
-                return true;
-            }
-
-            public void destroy() {
-
             }
         };
 
-        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setConnectionsPool(cp).build());
+        NettyAsyncHttpProviderConfig providerConfig = new NettyAsyncHttpProviderConfig();
+        providerConfig.setChannelPool(cp);
+        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setAsyncHttpClientProviderConfig(providerConfig)
+                .build());
         try {
             Exception exception = null;
             try {
@@ -108,6 +91,35 @@ public class NettyConnectionPoolTest extends ConnectionPoolTest {
                 exception = ex;
             }
             assertNull(exception);
+        } finally {
+            client.close();
+        }
+    }
+
+    @Test
+    public void testHostNotContactable() {
+        AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().build());
+
+        try {
+            String url = null;
+            try {
+                url = "http://127.0.0.1:" + findFreePort();
+            } catch (Exception e) {
+                fail("unable to find free port to simulate downed host");
+            }
+            int i;
+            for (i = 0; i < 2; i++) {
+                try {
+                    log.info("{} requesting url [{}]...", i, url);
+                    Response response = client.prepareGet(url).execute().get();
+                    log.info("{} response [{}].", i, response);
+                    fail("Shouldn't be here: should get an exception instead");
+                } catch (Exception ex) {
+                    assertNotNull(ex.getCause());
+                    Throwable cause = ex.getCause();
+                    assertTrue(cause instanceof ConnectException);
+                }
+            }
         } finally {
             client.close();
         }

@@ -15,11 +15,14 @@
  */
 package org.asynchttpclient;
 
-import org.asynchttpclient.Request.EntityWriter;
-
 import java.io.InputStream;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
+
+import org.asynchttpclient.cookie.Cookie;
+import org.asynchttpclient.multipart.Part;
+import org.asynchttpclient.util.QueryComputer;
 
 /**
  * Builder for a {@link Request}.
@@ -40,16 +43,24 @@ public class RequestBuilder extends RequestBuilderBase<RequestBuilder> {
         super(RequestBuilder.class, method, useRawUrl);
     }
 
+    public RequestBuilder(String method, QueryComputer queryComputer) {
+        super(RequestBuilder.class, method, queryComputer);
+    }
+
     public RequestBuilder(Request prototype) {
         super(RequestBuilder.class, prototype);
     }
 
+    public RequestBuilder(Request prototype, QueryComputer queryComputer) {
+        super(RequestBuilder.class, prototype, queryComputer);
+    }
+    
     // Note: For now we keep the delegates in place even though they are not needed
     //       since otherwise Clojure (and maybe other languages) won't be able to
     //       access these methods - see Clojure tickets 126 and 259
 
     @Override
-    public RequestBuilder addBodyPart(Part part) throws IllegalArgumentException {
+    public RequestBuilder addBodyPart(Part part) {
         return super.addBodyPart(part);
     }
 
@@ -64,18 +75,28 @@ public class RequestBuilder extends RequestBuilderBase<RequestBuilder> {
     }
 
     @Override
-    public RequestBuilder addParameter(String key, String value) throws IllegalArgumentException {
-        return super.addParameter(key, value);
+    public RequestBuilder addFormParam(String key, String value) {
+        return super.addFormParam(key, value);
     }
 
     @Override
-    public RequestBuilder addQueryParameter(String name, String value) {
-        return super.addQueryParameter(name, value);
+    public RequestBuilder addQueryParam(String name, String value) {
+        return super.addQueryParam(name, value);
     }
 
     @Override
-    public RequestBuilder setQueryParameters(FluentStringsMap parameters) {
-        return super.setQueryParameters(parameters);
+    public RequestBuilder addQueryParams(List<Param> queryParams) {
+        return super.addQueryParams(queryParams);
+    }
+
+    @Override
+    public RequestBuilder setQueryParams(List<Param> params) {
+        return super.setQueryParams(params);
+    }
+
+    @Override
+    public RequestBuilder setQueryParams(Map<String, List<String>> params) {
+        return super.setQueryParams(params);
     }
 
     @Override
@@ -84,38 +105,17 @@ public class RequestBuilder extends RequestBuilderBase<RequestBuilder> {
     }
 
     @Override
-    public RequestBuilder setBody(byte[] data) throws IllegalArgumentException {
+    public RequestBuilder setBody(byte[] data) {
         return super.setBody(data);
     }
 
     @Override
-    public RequestBuilder setBody(EntityWriter dataWriter, long length) throws IllegalArgumentException {
-        return super.setBody(dataWriter, length);
-    }
-
-    @Override
-    public RequestBuilder setBody(EntityWriter dataWriter) {
-        return super.setBody(dataWriter);
-    }
-
-    /**
-     * Deprecated - Use setBody(new InputStreamBodyGenerator(inputStream)).
-     *
-     * @param stream - An {@link InputStream}
-     * @return a {@link RequestBuilder}
-     * @throws IllegalArgumentException
-     * @see #setBody(BodyGenerator) InputStreamBodyGenerator(inputStream)
-     * @see org.asynchttpclient.generators.InputStreamBodyGenerator
-     * @deprecated {@link #setBody(BodyGenerator)} setBody(new InputStreamBodyGenerator(inputStream))
-     */
-    @Override
-    @Deprecated
-    public RequestBuilder setBody(InputStream stream) throws IllegalArgumentException {
+    public RequestBuilder setBody(InputStream stream) {
         return super.setBody(stream);
     }
 
     @Override
-    public RequestBuilder setBody(String data) throws IllegalArgumentException {
+    public RequestBuilder setBody(String data) {
         return super.setBody(data);
     }
 
@@ -135,13 +135,13 @@ public class RequestBuilder extends RequestBuilderBase<RequestBuilder> {
     }
 
     @Override
-    public RequestBuilder setParameters(Map<String, Collection<String>> parameters) throws IllegalArgumentException {
-        return super.setParameters(parameters);
+    public RequestBuilder setFormParams(List<Param> params) {
+        return super.setFormParams(params);
     }
 
     @Override
-    public RequestBuilder setParameters(FluentStringsMap parameters) throws IllegalArgumentException {
-        return super.setParameters(parameters);
+    public RequestBuilder setFormParams(Map<String, List<String>> params) {
+        return super.setFormParams(params);
     }
 
     @Override
@@ -165,8 +165,8 @@ public class RequestBuilder extends RequestBuilderBase<RequestBuilder> {
     }
 
     @Override
-    public RequestBuilder setFollowRedirects(boolean followRedirects) {
-        return super.setFollowRedirects(followRedirects);
+    public RequestBuilder setFollowRedirect(boolean followRedirect) {
+        return super.setFollowRedirect(followRedirect);
     }
 
     @Override

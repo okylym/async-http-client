@@ -13,7 +13,7 @@
 
 package org.asynchttpclient.providers.grizzly.filters.events;
 
-import org.asynchttpclient.providers.grizzly.HttpTransactionContext;
+import org.asynchttpclient.providers.grizzly.HttpTxContext;
 import org.glassfish.grizzly.filterchain.FilterChainEvent;
 
 /**
@@ -24,33 +24,24 @@ import org.glassfish.grizzly.filterchain.FilterChainEvent;
  */
 public final class ContinueEvent implements FilterChainEvent {
 
-    private final HttpTransactionContext context;
-
+    private final HttpTxContext context;
 
     // -------------------------------------------------------- Constructors
 
-
-    public ContinueEvent(final HttpTransactionContext context) {
-
+    public ContinueEvent(final HttpTxContext context) {
         this.context = context;
-
     }
 
-
     // --------------------------------------- Methods from FilterChainEvent
-
 
     @Override
     public Object type() {
         return ContinueEvent.class;
     }
 
-
     // ---------------------------------------------------------- Public Methods
 
-
-    public HttpTransactionContext getContext() {
+    public HttpTxContext getContext() {
         return context;
     }
-
 }

@@ -16,7 +16,7 @@
  */
 package org.asynchttpclient;
 
-import static org.asynchttpclient.util.MiscUtil.isNonEmpty;
+import static org.asynchttpclient.util.MiscUtils.isNonEmpty;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,12 +54,24 @@ public class FluentStringsMap implements Map<String, List<String>>, Iterable<Map
         }
     }
 
+    public FluentStringsMap add(String key, String value) {
+        if (key != null) {
+            List<String> curValues = values.get(key);
+
+            if (curValues == null) {
+                curValues = new ArrayList<String>(1);
+                values.put(key, curValues);
+            }
+            curValues.add(value);
+        }
+        return this;
+    }
+
     /**
      * Adds the specified values and returns this object.
      *
      * @param key    The key
-     * @param values The value(s); if null then this method has no effect. Use the empty string to
-     *               generate an empty value
+     * @param values The value(s); if the array is null then this method has no effect
      * @return This object
      */
     public FluentStringsMap add(String key, String... values) {
@@ -73,8 +85,7 @@ public class FluentStringsMap implements Map<String, List<String>>, Iterable<Map
      * Adds the specified values and returns this object.
      *
      * @param key    The key
-     * @param values The value(s); if null then this method has no effect. Use an empty collection
-     *               to generate an empty value
+     * @param values The value(s); if the array is null then this method has no effect
      * @return This object
      */
     public FluentStringsMap add(String key, Collection<String> values) {
@@ -127,8 +138,8 @@ public class FluentStringsMap implements Map<String, List<String>>, Iterable<Map
      * @param values The new values
      * @return This object
      */
-    public FluentStringsMap replace(final String key, final String... values) {
-        return replace(key, Arrays.asList(values));
+    public FluentStringsMap replaceWith(final String key, final String... values) {
+        return replaceWith(key, Arrays.asList(values));
     }
 
     /**
@@ -138,7 +149,7 @@ public class FluentStringsMap implements Map<String, List<String>>, Iterable<Map
      * @param values The new values
      * @return This object
      */
-    public FluentStringsMap replace(final String key, final Collection<String> values) {
+    public FluentStringsMap replaceWith(final String key, final Collection<String> values) {
         if (key != null) {
             if (values == null) {
                 this.values.remove(key);
@@ -159,7 +170,7 @@ public class FluentStringsMap implements Map<String, List<String>>, Iterable<Map
     public FluentStringsMap replaceAll(FluentStringsMap src) {
         if (src != null) {
             for (Map.Entry<String, List<String>> header : src) {
-                replace(header.getKey(), header.getValue());
+                replaceWith(header.getKey(), header.getValue());
             }
         }
         return this;
@@ -175,7 +186,7 @@ public class FluentStringsMap implements Map<String, List<String>>, Iterable<Map
     public FluentStringsMap replaceAll(Map<? extends String, ? extends Collection<String>> src) {
         if (src != null) {
             for (Map.Entry<? extends String, ? extends Collection<String>> header : src.entrySet()) {
-                replace(header.getKey(), header.getValue());
+                replaceWith(header.getKey(), header.getValue());
             }
         }
         return this;
@@ -192,7 +203,7 @@ public class FluentStringsMap implements Map<String, List<String>>, Iterable<Map
 
         List<String> oldValue = get(key);
 
-        replace(key, value);
+        replaceWith(key, value);
         return oldValue;
     }
 
@@ -389,6 +400,20 @@ public class FluentStringsMap implements Map<String, List<String>>, Iterable<Map
         return values.values();
     }
 
+    public List<Param> toParams() {
+        if (values.isEmpty())
+            return Collections.emptyList();
+        else {
+            List<Param> params = new ArrayList<Param>(values.size());
+            for (Map.Entry<String, List<String>> entry : values.entrySet()) {
+                String name = entry.getKey();
+                for (String value: entry.getValue())
+                    params.add(new Param(name, value));
+            }
+            return params;
+        }
+    }
+    
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {

@@ -13,6 +13,11 @@
 
 package org.asynchttpclient.providers.grizzly;
 
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertNull;
+import static org.testng.Assert.fail;
+
 import org.asynchttpclient.AsyncCompletionHandler;
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
@@ -27,16 +32,12 @@ import org.testng.annotations.Test;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertFalse;
-import static org.testng.Assert.assertNull;
-import static org.testng.Assert.fail;
 
 public class GrizzlyUnexpectingTimeoutTest extends AbstractBasicTest {
 
@@ -57,7 +58,8 @@ public class GrizzlyUnexpectingTimeoutTest extends AbstractBasicTest {
     }
 
     private class ExpectExceptionHandler extends AbstractHandler {
-        public void handle(String target, Request baseRequest, HttpServletRequest request, final HttpServletResponse response) throws IOException, ServletException {
+        public void handle(String target, Request baseRequest, HttpServletRequest request, final HttpServletResponse response)
+                throws IOException, ServletException {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             final Continuation continuation = ContinuationSupport.getContinuation(request);
             continuation.suspend();
@@ -67,7 +69,7 @@ public class GrizzlyUnexpectingTimeoutTest extends AbstractBasicTest {
                         response.getOutputStream().print(MSG);
                         response.getOutputStream().flush();
                     } catch (IOException e) {
-                        log.error(e.getMessage(), e);
+                        logger.error(e.getMessage(), e);
                     }
                 }
             }).start();
@@ -80,7 +82,7 @@ public class GrizzlyUnexpectingTimeoutTest extends AbstractBasicTest {
         final AtomicInteger counts = new AtomicInteger();
         final int timeout = 100;
 
-        final AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setRequestTimeoutInMs(timeout).build());
+        final AsyncHttpClient client = getAsyncHttpClient(new AsyncHttpClientConfig.Builder().setRequestTimeout(timeout).build());
         try {
             Future<Response> responseFuture = client.prepareGet(getTargetUrl()).execute(new AsyncCompletionHandler<Response>() {
                 @Override
@@ -113,7 +115,7 @@ public class GrizzlyUnexpectingTimeoutTest extends AbstractBasicTest {
                 fail("Interrupted.", e);
             }
             // the result should be either onCompleted or onThrowable.
-            assertEquals(1, counts.get(), "result should be one");
+            assertEquals(counts.get(), 1, "result should be one");
         } finally {
             client.close();
         }

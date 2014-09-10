@@ -15,6 +15,11 @@
  */
 package org.asynchttpclient.async;
 
+import static org.asynchttpclient.async.util.TestUtils.addHttpConnector;
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
+import static org.asynchttpclient.async.util.TestUtils.newJettyHttpServer;
+import static org.testng.Assert.fail;
+
 import org.asynchttpclient.AsyncCompletionHandler;
 import org.asynchttpclient.AsyncHandler;
 import org.asynchttpclient.AsyncHttpClient;
@@ -23,143 +28,42 @@ import org.asynchttpclient.HttpResponseBodyPart;
 import org.asynchttpclient.HttpResponseHeaders;
 import org.asynchttpclient.HttpResponseStatus;
 import org.asynchttpclient.Response;
-import org.eclipse.jetty.server.Connector;
-import org.eclipse.jetty.server.Request;
+import org.asynchttpclient.async.util.EchoHandler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testng.Assert;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.net.ServerSocket;
-import java.util.Enumeration;
-
 public abstract class AbstractBasicTest {
-    protected final Logger log = LoggerFactory.getLogger(AbstractBasicTest.class);
+
+    protected final static int TIMEOUT = 30;
+
+    protected final Logger logger = LoggerFactory.getLogger(getClass());
+
     protected Server server;
     protected int port1;
     protected int port2;
 
-    public final static int TIMEOUT = 30;
+    @BeforeClass(alwaysRun = true)
+    public void setUpGlobal() throws Exception {
 
-    public static class EchoHandler extends AbstractHandler {
+        port1 = findFreePort();
+        port2 = findFreePort();
 
-        /* @Override */
-        public void handle(String pathInContext,
-                           Request request,
-                           HttpServletRequest httpRequest,
-                           HttpServletResponse httpResponse) throws IOException, ServletException {
+        server = newJettyHttpServer(port1);
+        server.setHandler(configureHandler());
+        addHttpConnector(server, port2);
+        server.start();
 
-            if (httpRequest.getHeader("X-HEAD") != null) {
-                httpResponse.setContentLength(1);
-            }
-
-            if (httpRequest.getHeader("X-ISO") != null) {
-                httpResponse.setContentType("text/html; charset=ISO-8859-1");
-            } else {
-                httpResponse.setContentType("text/html; charset=utf-8");
-            }
-
-            if (request.getMethod().equalsIgnoreCase("OPTIONS")) {
-                httpResponse.addHeader("Allow","GET,HEAD,POST,OPTIONS,TRACE");
-            };
-
-            Enumeration<?> e = httpRequest.getHeaderNames();
-            String param;
-            while (e.hasMoreElements()) {
-                param = e.nextElement().toString();
-
-                if (param.startsWith("LockThread")) {
-                    try {
-                        Thread.sleep(40 * 1000);
-                    } catch (InterruptedException ex) {
-                    }
-                }
-
-                if (param.startsWith("X-redirect")) {
-                    httpResponse.sendRedirect(httpRequest.getHeader("X-redirect"));
-                    return;
-                }
-                httpResponse.addHeader("X-" + param, httpRequest.getHeader(param));
-            }
-
-            Enumeration<?> i = httpRequest.getParameterNames();
-
-            StringBuilder requestBody = new StringBuilder();
-            while (i.hasMoreElements()) {
-                param = i.nextElement().toString();
-                httpResponse.addHeader("X-" + param, httpRequest.getParameter(param));
-                requestBody.append(param);
-                requestBody.append("_");
-            }
-
-            String pathInfo = httpRequest.getPathInfo();
-            if (pathInfo != null)
-                httpResponse.addHeader("X-pathInfo", pathInfo);
-
-            String queryString = httpRequest.getQueryString();
-            if (queryString != null)
-                httpResponse.addHeader("X-queryString", queryString);
-
-            httpResponse.addHeader("X-KEEP-ALIVE", httpRequest.getRemoteAddr() + ":" + httpRequest.getRemotePort());
-
-            javax.servlet.http.Cookie[] cs = httpRequest.getCookies();
-            if (cs != null) {
-                for (javax.servlet.http.Cookie c : cs) {
-                    httpResponse.addCookie(c);
-                }
-            }
-
-            if (requestBody.length() > 0) {
-                httpResponse.getOutputStream().write(requestBody.toString().getBytes());
-            }
-
-            int size = 16384;
-            if (httpRequest.getContentLength() > 0) {
-                size = httpRequest.getContentLength();
-            }
-            byte[] bytes = new byte[size];
-            if (bytes.length > 0) {
-                int read = 0;
-                while (read > -1) {
-                    read = httpRequest.getInputStream().read(bytes);
-                    if (read > 0) {
-                        httpResponse.getOutputStream().write(bytes, 0, read);
-                    }
-                }
-            }
-
-            httpResponse.setStatus(200);
-            httpResponse.getOutputStream().flush();
-            httpResponse.getOutputStream().close();
-        }
+        logger.info("Local HTTP server started successfully");
     }
 
     @AfterClass(alwaysRun = true)
     public void tearDownGlobal() throws Exception {
-        server.stop();
-    }
-
-    protected int findFreePort() throws IOException {
-        ServerSocket socket = null;
-
-        try {
-            socket = new ServerSocket(0);
-
-            return socket.getLocalPort();
-        }
-        finally {
-            if (socket != null) {
-                socket.close();
-            }
-        }
+        if (server != null)
+            server.stop();
     }
 
     protected String getTargetUrl() {
@@ -174,31 +78,6 @@ public abstract class AbstractBasicTest {
         return new EchoHandler();
     }
 
-    @BeforeClass(alwaysRun = true)
-    public void setUpGlobal() throws Exception {
-        server = new Server();
-
-        port1 = findFreePort();
-        port2 = findFreePort();
-
-        Connector listener = new SelectChannelConnector();
-
-        listener.setHost("127.0.0.1");
-        listener.setPort(port1);
-
-        server.addConnector(listener);
-
-        listener = new SelectChannelConnector();
-        listener.setHost("127.0.0.1");
-        listener.setPort(port2);
-
-        server.addConnector(listener);
-
-        server.setHandler(configureHandler());
-        server.start();
-        log.info("Local HTTP server started successfully");
-    }
-
     public static class AsyncCompletionHandlerAdapter extends AsyncCompletionHandler<Response> {
         public Runnable runnable;
 
@@ -207,45 +86,41 @@ public abstract class AbstractBasicTest {
             return response;
         }
 
-        /* @Override */
+        @Override
         public void onThrowable(Throwable t) {
             t.printStackTrace();
-            Assert.fail("Unexpected exception: " + t.getMessage(), t);
+            fail("Unexpected exception: " + t.getMessage(), t);
         }
-
     }
 
     public static class AsyncHandlerAdapter implements AsyncHandler<String> {
 
-
-        /* @Override */
+        @Override
         public void onThrowable(Throwable t) {
             t.printStackTrace();
-            Assert.fail("Unexpected exception", t);
+            fail("Unexpected exception", t);
         }
 
-        /* @Override */
+        @Override
         public STATE onBodyPartReceived(final HttpResponseBodyPart content) throws Exception {
             return STATE.CONTINUE;
         }
 
-        /* @Override */
+        @Override
         public STATE onStatusReceived(final HttpResponseStatus responseStatus) throws Exception {
             return STATE.CONTINUE;
         }
 
-        /* @Override */
+        @Override
         public STATE onHeadersReceived(final HttpResponseHeaders headers) throws Exception {
             return STATE.CONTINUE;
         }
 
-        /* @Override */
+        @Override
         public String onCompleted() throws Exception {
             return "";
         }
-
     }
 
     public abstract AsyncHttpClient getAsyncHttpClient(AsyncHttpClientConfig config);
-
 }

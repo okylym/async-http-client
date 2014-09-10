@@ -15,45 +15,44 @@
  */
 package org.asynchttpclient.async;
 
+import static org.asynchttpclient.async.util.TestUtils.TEXT_HTML_CONTENT_TYPE_WITH_UTF_8_CHARSET;
+import static org.asynchttpclient.async.util.TestUtils.addHttpsConnector;
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
+import static org.asynchttpclient.async.util.TestUtils.newJettyHttpServer;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
 import org.asynchttpclient.Response;
-import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.Request;
-import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
-import org.eclipse.jetty.server.ssl.SslSocketConnector;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.File;
+
 import java.io.IOException;
-import java.net.URI;
-import java.net.URL;
 import java.util.Enumeration;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNotNull;
-
 public abstract class HttpToHttpsRedirectTest extends AbstractBasicTest {
-    private final AtomicBoolean isSet = new AtomicBoolean(false);
+
+    private final AtomicBoolean redirectDone = new AtomicBoolean(false);
 
     private class Relative302Handler extends AbstractHandler {
 
         public void handle(String s, Request r, HttpServletRequest httpRequest, HttpServletResponse httpResponse) throws IOException, ServletException {
 
             String param;
-            httpResponse.setContentType("text/html; charset=utf-8");
+            httpResponse.setContentType(TEXT_HTML_CONTENT_TYPE_WITH_UTF_8_CHARSET);
             Enumeration<?> e = httpRequest.getHeaderNames();
             while (e.hasMoreElements()) {
                 param = e.nextElement().toString();
 
-                if (param.startsWith("X-redirect") && !isSet.getAndSet(true)) {
+                if (param.startsWith("X-redirect") && !redirectDone.getAndSet(true)) {
                     httpResponse.addHeader("Location", httpRequest.getHeader(param));
                     httpResponse.setStatus(302);
                     httpResponse.getOutputStream().flush();
@@ -64,7 +63,7 @@ public abstract class HttpToHttpsRedirectTest extends AbstractBasicTest {
 
             if (r.getScheme().equalsIgnoreCase("https")) {
                 httpResponse.addHeader("X-httpToHttps", "PASS");
-                isSet.getAndSet(false);
+                redirectDone.getAndSet(false);
             }
 
             httpResponse.setStatus(200);
@@ -75,69 +74,33 @@ public abstract class HttpToHttpsRedirectTest extends AbstractBasicTest {
 
     @BeforeClass(alwaysRun = true)
     public void setUpGlobal() throws Exception {
-        server = new Server();
-
         port1 = findFreePort();
         port2 = findFreePort();
 
-        Connector listener = new SelectChannelConnector();
-
-        listener.setHost("127.0.0.1");
-        listener.setPort(port1);
-        server.addConnector(listener);
-
-        SslSocketConnector connector = new SslSocketConnector();
-        connector.setHost("127.0.0.1");
-        connector.setPort(port2);
-
-        ClassLoader cl = getClass().getClassLoader();
-        // override system properties
-        URL cacertsUrl = cl.getResource("ssltest-cacerts.jks");
-        String trustStoreFile = new File(cacertsUrl.toURI()).getAbsolutePath();
-        connector.setTruststore(trustStoreFile);
-        connector.setTrustPassword("changeit");
-        connector.setTruststoreType("JKS");
-
-        log.info("SSL certs path: {}", trustStoreFile);
-
-        // override system properties
-        URL keystoreUrl = cl.getResource("ssltest-keystore.jks");
-        String keyStoreFile = new File(keystoreUrl.toURI()).getAbsolutePath();
-        connector.setKeystore(keyStoreFile);
-        connector.setKeyPassword("changeit");
-        connector.setKeystoreType("JKS");
-
-        log.info("SSL keystore path: {}", keyStoreFile);
-
-        server.addConnector(connector);
-
+        server = newJettyHttpServer(port1);
+        addHttpsConnector(server, port2);
         server.setHandler(new Relative302Handler());
         server.start();
-        log.info("Local HTTP server started successfully");
-    }
-
-    private String getBaseUrl(URI uri) {
-        String url = uri.toString();
-        int port = uri.getPort();
-        if (port == -1) {
-            port = getPort(uri);
-            url = url.substring(0, url.length() - 1) + ":" + port;
-        }
-        return url.substring(0, url.lastIndexOf(":") + String.valueOf(port).length() + 1);
-    }
-
-    private static int getPort(URI uri) {
-        int port = uri.getPort();
-        if (port == -1)
-            port = uri.getScheme().equals("http") ? 80 : 443;
-        return port;
+        logger.info("Local HTTP server started successfully");
     }
 
     @Test(groups = { "standalone", "default_provider" })
-    public void httpToHttpsRedirect() throws Throwable {
-        isSet.getAndSet(false);
+    // FIXME find a way to make this threadsafe, other, set @Test(singleThreaded = true)
+    public void runAllSequentiallyBecauseNotThreadSafe() throws Exception {
+        httpToHttpsRedirect();
+        httpToHttpsProperConfig();
+        relativeLocationUrl();
+    }
 
-        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder().setMaximumNumberOfRedirects(5).setFollowRedirects(true).build();
+    // @Test(groups = { "standalone", "default_provider" })
+    public void httpToHttpsRedirect() throws Exception {
+        redirectDone.getAndSet(false);
+
+        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder()//
+                .setMaxRedirects(5)//
+                .setFollowRedirect(true)//
+                .setAcceptAnyCertificate(true)//
+                .build();
         AsyncHttpClient c = getAsyncHttpClient(cg);
         try {
             Response response = c.prepareGet(getTargetUrl()).setHeader("X-redirect", getTargetUrl2()).execute().get();
@@ -149,15 +112,15 @@ public abstract class HttpToHttpsRedirectTest extends AbstractBasicTest {
         }
     }
 
-    public String getTargetUrl2() {
-        return String.format("https://127.0.0.1:%d/foo/test", port2);
-    }
+    // @Test(groups = { "standalone", "default_provider" })
+    public void httpToHttpsProperConfig() throws Exception {
+        redirectDone.getAndSet(false);
 
-    @Test(groups = { "standalone", "default_provider" })
-    public void httpToHttpsProperConfig() throws Throwable {
-        isSet.getAndSet(false);
-
-        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder().setMaximumNumberOfRedirects(5).setFollowRedirects(true).build();
+        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder()//
+                .setMaxRedirects(5)//
+                .setFollowRedirect(true)//
+                .setAcceptAnyCertificate(true)//
+                .build();
         AsyncHttpClient c = getAsyncHttpClient(cg);
         try {
             Response response = c.prepareGet(getTargetUrl()).setHeader("X-redirect", getTargetUrl2() + "/test2").execute().get();
@@ -175,11 +138,15 @@ public abstract class HttpToHttpsRedirectTest extends AbstractBasicTest {
         }
     }
 
-    @Test(groups = { "standalone", "default_provider" })
-    public void relativeLocationUrl() throws Throwable {
-        isSet.getAndSet(false);
+    // @Test(groups = { "standalone", "default_provider" })
+    public void relativeLocationUrl() throws Exception {
+        redirectDone.getAndSet(false);
 
-        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder().setMaximumNumberOfRedirects(5).setFollowRedirects(true).build();
+        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder()//
+                .setMaxRedirects(5)//
+                .setFollowRedirect(true)//
+                .setAcceptAnyCertificate(true)//
+                .build();
         AsyncHttpClient c = getAsyncHttpClient(cg);
         try {
             Response response = c.prepareGet(getTargetUrl()).setHeader("X-redirect", "/foo/test").execute().get();

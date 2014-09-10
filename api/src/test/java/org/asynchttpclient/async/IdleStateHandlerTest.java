@@ -15,39 +15,33 @@
  */
 package org.asynchttpclient.async;
 
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
+import static org.asynchttpclient.async.util.TestUtils.newJettyHttpServer;
+import static org.testng.Assert.fail;
+
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig;
-import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.Request;
-import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.testng.Assert.fail;
 
 public abstract class IdleStateHandlerTest extends AbstractBasicTest {
-    private final AtomicBoolean isSet = new AtomicBoolean(false);
 
     private class IdleStateHandler extends AbstractHandler {
 
-        public void handle(String s,
-                           Request r,
-                           HttpServletRequest httpRequest,
-                           HttpServletResponse httpResponse) throws IOException, ServletException {
+        public void handle(String s, Request r, HttpServletRequest httpRequest, HttpServletResponse httpResponse) throws IOException, ServletException {
 
             try {
                 Thread.sleep(20 * 1000);
-            }
-            catch (InterruptedException e) {
+            } catch (InterruptedException e) {
                 e.printStackTrace();
             }
             httpResponse.setStatus(200);
@@ -58,24 +52,16 @@ public abstract class IdleStateHandlerTest extends AbstractBasicTest {
 
     @BeforeClass(alwaysRun = true)
     public void setUpGlobal() throws Exception {
-        server = new Server();
-
         port1 = findFreePort();
-        Connector listener = new SelectChannelConnector();
-
-        listener.setHost("127.0.0.1");
-        listener.setPort(port1);
-        server.addConnector(listener);
-
+        server = newJettyHttpServer(port1);
         server.setHandler(new IdleStateHandler());
         server.start();
-        log.info("Local HTTP server started successfully");
+        logger.info("Local HTTP server started successfully");
     }
 
-    @Test(groups = {"online", "default_provider"})
-    public void idleStateTest() throws Throwable {
-        isSet.getAndSet(false);
-        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder().setIdleConnectionInPoolTimeoutInMs(10 * 1000).build();
+    @Test(groups = { "online", "default_provider" })
+    public void idleStateTest() throws Exception {
+        AsyncHttpClientConfig cg = new AsyncHttpClientConfig.Builder().setPooledConnectionIdleTimeout(10 * 1000).build();
         AsyncHttpClient c = getAsyncHttpClient(cg);
 
         try {

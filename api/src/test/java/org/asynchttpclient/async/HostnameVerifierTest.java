@@ -12,53 +12,46 @@
  */
 package org.asynchttpclient.async;
 
+import static org.asynchttpclient.async.util.TestUtils.SIMPLE_TEXT_FILE;
+import static org.asynchttpclient.async.util.TestUtils.SIMPLE_TEXT_FILE_STRING;
+import static org.asynchttpclient.async.util.TestUtils.TEXT_HTML_CONTENT_TYPE_WITH_UTF_8_CHARSET;
+import static org.asynchttpclient.async.util.TestUtils.createSSLContext;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.fail;
+
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.AsyncHttpClientConfig.Builder;
 import org.asynchttpclient.Response;
 import org.eclipse.jetty.server.Request;
-import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.AbstractHandler;
-import org.eclipse.jetty.server.ssl.SslSocketConnector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testng.annotations.AfterClass;
-import org.testng.annotations.AfterMethod;
-import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
-import javax.net.ssl.*;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLSession;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.File;
+
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.ConnectException;
-import java.net.ServerSocket;
-import java.net.URL;
-import java.security.KeyStore;
-import java.security.SecureRandom;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.Enumeration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertNotNull;
-import static org.testng.Assert.fail;
-
-public abstract class HostnameVerifierTest extends AbstractBasicTest {
+public abstract class HostnameVerifierTest extends AbstractBasicHttpsTest {
 
     protected final Logger log = LoggerFactory.getLogger(HostnameVerifierTest.class);
 
     public static class EchoHandler extends AbstractHandler {
 
-        /* @Override */
+        @Override
         public void handle(String pathInContext, Request r, HttpServletRequest httpRequest, HttpServletResponse httpResponse) throws ServletException, IOException {
 
-            httpResponse.setContentType("text/html; charset=utf-8");
+            httpResponse.setContentType(TEXT_HTML_CONTENT_TYPE_WITH_UTF_8_CHARSET);
             Enumeration<?> e = httpRequest.getHeaderNames();
             String param;
             while (e.hasMoreElements()) {
@@ -128,17 +121,6 @@ public abstract class HostnameVerifierTest extends AbstractBasicTest {
         }
     }
 
-    @AfterClass(alwaysRun = true)
-    public void tearDownGlobal() throws Exception {
-        server.stop();
-    }
-
-    @AfterMethod(alwaysRun = true)
-    public void tearDownProps() throws Exception {
-        System.clearProperty("javax.net.ssl.keyStore");
-        System.clearProperty("javax.net.ssl.trustStore");
-    }
-
     protected String getTargetUrl() {
         return String.format("https://127.0.0.1:%d/foo/test", port1);
     }
@@ -147,86 +129,28 @@ public abstract class HostnameVerifierTest extends AbstractBasicTest {
         return new EchoHandler();
     }
 
-    protected int findFreePort() throws IOException {
-        ServerSocket socket = null;
-
-        try {
-            socket = new ServerSocket(0);
-
-            return socket.getLocalPort();
-        } finally {
-            if (socket != null) {
-                socket.close();
-            }
-        }
-    }
-
-    @BeforeClass(alwaysRun = true)
-    public void setUpGlobal() throws Exception {
-        server = new Server();
-        port1 = findFreePort();
-        SslSocketConnector connector = new SslSocketConnector();
-        connector.setHost("127.0.0.1");
-        connector.setPort(port1);
-
-        ClassLoader cl = getClass().getClassLoader();
-        // override system properties
-        URL cacertsUrl = cl.getResource("ssltest-cacerts.jks");
-        String trustStoreFile = new File(cacertsUrl.toURI()).getAbsolutePath();
-        connector.setTruststore(trustStoreFile);
-        connector.setTrustPassword("changeit");
-        connector.setTruststoreType("JKS");
-
-        log.info("SSL certs path: {}", trustStoreFile);
-
-        // override system properties
-        URL keystoreUrl = cl.getResource("ssltest-keystore.jks");
-        String keyStoreFile = new File(keystoreUrl.toURI()).getAbsolutePath();
-        connector.setKeystore(keyStoreFile);
-        connector.setKeyPassword("changeit");
-        connector.setKeystoreType("JKS");
-
-        log.info("SSL keystore path: {}", keyStoreFile);
-
-        server.addConnector(connector);
-
-        server.setHandler(configureHandler());
-        server.start();
-        log.info("Local HTTP server started successfully");
-    }
-
     @Test(groups = { "standalone", "default_provider" })
-    public void positiveHostnameVerifierTest() throws Throwable {
+    public void positiveHostnameVerifierTest() throws Exception {
 
-        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new PositiveHostVerifier()).setSSLContext(createSSLContext()).build());
+        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new PositiveHostVerifier()).setSSLContext(createSSLContext(new AtomicBoolean(true))).build());
         try {
-            ClassLoader cl = getClass().getClassLoader();
-            // override system properties
-            URL url = cl.getResource("SimpleTextFile.txt");
-            File file = new File(url.toURI());
-
-            Future<Response> f = client.preparePost(getTargetUrl()).setBody(file).setHeader("Content-Type", "text/html").execute();
+            Future<Response> f = client.preparePost(getTargetUrl()).setBody(SIMPLE_TEXT_FILE).setHeader("Content-Type", "text/html").execute();
             Response resp = f.get();
             assertNotNull(resp);
             assertEquals(resp.getStatusCode(), HttpServletResponse.SC_OK);
-            assertEquals(resp.getResponseBody(), "This is a simple test file");
+            assertEquals(resp.getResponseBody(), SIMPLE_TEXT_FILE_STRING);
         } finally {
             client.close();
         }
     }
 
     @Test(groups = { "standalone", "default_provider" })
-    public void negativeHostnameVerifierTest() throws Throwable {
+    public void negativeHostnameVerifierTest() throws Exception {
 
-        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new NegativeHostVerifier()).setSSLContext(createSSLContext()).build());
+        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new NegativeHostVerifier()).setSSLContext(createSSLContext(new AtomicBoolean(true))).build());
         try {
-            ClassLoader cl = getClass().getClassLoader();
-            // override system properties
-            URL url = cl.getResource("SimpleTextFile.txt");
-            File file = new File(url.toURI());
-
             try {
-                client.preparePost(getTargetUrl()).setBody(file).setHeader("Content-Type", "text/html").execute().get();
+                client.preparePost(getTargetUrl()).setBody(SIMPLE_TEXT_FILE).setHeader("Content-Type", "text/html").execute().get();
                 fail("ConnectException expected");
             } catch (ExecutionException ex) {
                 assertEquals(ex.getCause().getClass(), ConnectException.class);
@@ -237,61 +161,42 @@ public abstract class HostnameVerifierTest extends AbstractBasicTest {
     }
 
     @Test(groups = { "standalone", "default_provider" })
-    public void remoteIDHostnameVerifierTest() throws Throwable {
+    public void remoteIDHostnameVerifierTest() throws Exception {
 
-        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new CheckHost("bouette")).setSSLContext(createSSLContext()).build());
+        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new CheckHost("bouette")).setSSLContext(createSSLContext(new AtomicBoolean(true))).build());
         try {
-            ClassLoader cl = getClass().getClassLoader();
-            // override system properties
-            URL url = cl.getResource("SimpleTextFile.txt");
-            File file = new File(url.toURI());
-
-            try {
-                client.preparePost(getTargetUrl()).setBody(file).setHeader("Content-Type", "text/html").execute().get();
-                fail("ConnectException expected");
-            } catch (ExecutionException ex) {
-                assertEquals(ex.getCause().getClass(), ConnectException.class);
-            }
+            client.preparePost(getTargetUrl()).setBody(SIMPLE_TEXT_FILE).setHeader("Content-Type", "text/html").execute().get();
+            fail("ConnectException expected");
+        } catch (ExecutionException ex) {
+            assertEquals(ex.getCause().getClass(), ConnectException.class);
         } finally {
             client.close();
         }
     }
 
     @Test(groups = { "standalone", "default_provider" })
-    public void remoteNegHostnameVerifierTest() throws Throwable {
+    public void remoteNegHostnameVerifierTest() throws Exception {
         // request is made to 127.0.0.1, but cert presented for localhost - this should fail
-        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new CheckHost("localhost")).setSSLContext(createSSLContext()).build());
+        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new CheckHost("localhost")).setSSLContext(createSSLContext(new AtomicBoolean(true))).build());
         try {
-            ClassLoader cl = getClass().getClassLoader();
-            // override system properties
-            URL url = cl.getResource("SimpleTextFile.txt");
-            File file = new File(url.toURI());
-
-            try {
-                client.preparePost(getTargetUrl()).setBody(file).setHeader("Content-Type", "text/html").execute().get();
-                fail("ConnectException expected");
-            } catch (ExecutionException ex) {
-                assertEquals(ex.getCause().getClass(), ConnectException.class);
-            }
+            client.preparePost(getTargetUrl()).setBody(SIMPLE_TEXT_FILE).setHeader("Content-Type", "text/html").execute().get();
+            fail("ConnectException expected");
+        } catch (ExecutionException ex) {
+            assertEquals(ex.getCause().getClass(), ConnectException.class);
         } finally {
             client.close();
         }
     }
 
     @Test(groups = { "standalone", "default_provider" })
-    public void remotePosHostnameVerifierTest() throws Throwable {
+    public void remotePosHostnameVerifierTest() throws Exception {
 
-        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new CheckHost("127.0.0.1")).setSSLContext(createSSLContext()).build());
+        final AsyncHttpClient client = getAsyncHttpClient(new Builder().setHostnameVerifier(new CheckHost("127.0.0.1")).setSSLContext(createSSLContext(new AtomicBoolean(true))).build());
         try {
-            ClassLoader cl = getClass().getClassLoader();
-            // override system properties
-            URL url = cl.getResource("SimpleTextFile.txt");
-            File file = new File(url.toURI());
-
-            Response resp = client.preparePost(getTargetUrl()).setBody(file).setHeader("Content-Type", "text/html").execute().get();
+            Response resp = client.preparePost(getTargetUrl()).setBody(SIMPLE_TEXT_FILE).setHeader("Content-Type", "text/html").execute().get();
             assertNotNull(resp);
             assertEquals(resp.getStatusCode(), HttpServletResponse.SC_OK);
-            assertEquals(resp.getResponseBody(), "This is a simple test file");
+            assertEquals(resp.getResponseBody(), SIMPLE_TEXT_FILE_STRING);
         } finally {
             client.close();
         }
@@ -320,54 +225,7 @@ public abstract class HostnameVerifierTest extends AbstractBasicTest {
         }
 
         public boolean verify(String s, SSLSession sslSession) {
-
-            if (s != null && s.equalsIgnoreCase(hostName)) {
-                return true;
-            }
-
-            return false;
+            return s != null && s.equalsIgnoreCase(hostName);
         }
     }
-
-    private static SSLContext createSSLContext() {
-        try {
-            InputStream keyStoreStream = HostnameVerifierTest.class.getResourceAsStream("ssltest-cacerts.jks");
-            char[] keyStorePassword = "changeit".toCharArray();
-            KeyStore ks = KeyStore.getInstance("JKS");
-            ks.load(keyStoreStream, keyStorePassword);
-
-            // Set up key manager factory to use our key store
-            char[] certificatePassword = "changeit".toCharArray();
-            KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
-            kmf.init(ks, certificatePassword);
-
-            // Initialize the SSLContext to work with our key managers.
-            KeyManager[] keyManagers = kmf.getKeyManagers();
-            TrustManager[] trustManagers = new TrustManager[] { DUMMY_TRUST_MANAGER };
-            SecureRandom secureRandom = new SecureRandom();
-
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(keyManagers, trustManagers, secureRandom);
-
-            return sslContext;
-        } catch (Exception e) {
-            throw new Error("Failed to initialize the server-side SSLContext", e);
-        }
-    }
-
-    private static final AtomicBoolean TRUST_SERVER_CERT = new AtomicBoolean(true);
-    private static final TrustManager DUMMY_TRUST_MANAGER = new X509TrustManager() {
-        public X509Certificate[] getAcceptedIssuers() {
-            return new X509Certificate[0];
-        }
-
-        public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        }
-
-        public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-            if (!TRUST_SERVER_CERT.get()) {
-                throw new CertificateException("Server certificate not trusted.");
-            }
-        }
-    };
 }

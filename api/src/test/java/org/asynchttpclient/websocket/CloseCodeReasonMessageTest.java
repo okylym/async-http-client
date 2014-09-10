@@ -12,23 +12,32 @@
  */
 package org.asynchttpclient.websocket;
 
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertTrue;
+
 import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.websocket.WebSocket;
-import org.asynchttpclient.websocket.WebSocketCloseCodeReasonListener;
-import org.asynchttpclient.websocket.WebSocketListener;
-import org.asynchttpclient.websocket.WebSocketUpgradeHandler;
+import org.eclipse.jetty.websocket.server.WebSocketHandler;
+import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
 import org.testng.annotations.Test;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.testng.Assert.assertEquals;
-import static org.testng.Assert.assertTrue;
+public abstract class CloseCodeReasonMessageTest extends AbstractBasicTest {
 
-public abstract class CloseCodeReasonMessageTest extends TextMessageTest {
-
+    @Override
+    public WebSocketHandler getWebSocketHandler() {
+        return new WebSocketHandler() {
+            @Override
+            public void configure(WebSocketServletFactory factory) {
+                factory.register(EchoSocket.class);
+            }
+        };
+    }
+    
     @Test(timeOut = 60000)
-    public void onCloseWithCode() throws Throwable {
+    public void onCloseWithCode() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             final CountDownLatch latch = new CountDownLatch(1);
@@ -46,7 +55,7 @@ public abstract class CloseCodeReasonMessageTest extends TextMessageTest {
     }
 
     @Test(timeOut = 60000)
-    public void onCloseWithCodeServerClose() throws Throwable {
+    public void onCloseWithCodeServerClose() throws Exception {
         AsyncHttpClient c = getAsyncHttpClient(null);
         try {
             final CountDownLatch latch = new CountDownLatch(1);
@@ -55,13 +64,7 @@ public abstract class CloseCodeReasonMessageTest extends TextMessageTest {
             c.prepareGet(getTargetUrl()).execute(new WebSocketUpgradeHandler.Builder().addWebSocketListener(new Listener(latch, text)).build()).get();
 
             latch.await();
-            final String[] parts = text.get().split(" ");
-            assertEquals(parts.length, 5);
-            assertEquals(parts[0], "1000-Idle");
-            assertEquals(parts[1], "for");
-            assertTrue(Integer.parseInt(parts[2].substring(0, parts[2].indexOf('m'))) > 10000);
-            assertEquals(parts[3], ">");
-            assertEquals(parts[4], "10000ms");
+            assertEquals(text.get(), "1001-Idle Timeout");
         } finally {
             c.close();
         }
@@ -78,12 +81,13 @@ public abstract class CloseCodeReasonMessageTest extends TextMessageTest {
             this.text = text;
         }
 
-        // @Override
+        @Override
         public void onOpen(WebSocket websocket) {
         }
 
-        // @Override
+        @Override
         public void onClose(WebSocket websocket) {
+            latch.countDown();
         }
 
         public void onClose(WebSocket websocket, int code, String reason) {
@@ -91,10 +95,82 @@ public abstract class CloseCodeReasonMessageTest extends TextMessageTest {
             latch.countDown();
         }
 
-        // @Override
+        @Override
         public void onError(Throwable t) {
             t.printStackTrace();
             latch.countDown();
+        }
+    }
+
+    @Test(timeOut = 60000)
+    public void wrongStatusCode() throws Throwable {
+        AsyncHttpClient c = getAsyncHttpClient(null);
+        try {
+            final CountDownLatch latch = new CountDownLatch(1);
+            final AtomicReference<Throwable> throwable = new AtomicReference<Throwable>();
+
+            c.prepareGet("http://apache.org").execute(new WebSocketUpgradeHandler.Builder().addWebSocketListener(new WebSocketTextListener() {
+
+                @Override
+                public void onMessage(String message) {
+                }
+
+                @Override
+                public void onOpen(WebSocket websocket) {
+                }
+
+                @Override
+                public void onClose(WebSocket websocket) {
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    throwable.set(t);
+                    latch.countDown();
+                }
+            }).build()).get();
+
+            latch.await();
+            assertNotNull(throwable.get());
+            assertEquals(throwable.get().getClass(), IllegalStateException.class);
+        } finally {
+            c.close();
+        }
+    }
+
+    @Test(timeOut = 60000)
+    public void wrongProtocolCode() throws Throwable {
+        AsyncHttpClient c = getAsyncHttpClient(null);
+        try {
+            final CountDownLatch latch = new CountDownLatch(1);
+            final AtomicReference<Throwable> throwable = new AtomicReference<Throwable>();
+
+            c.prepareGet("ws://www.google.com").execute(new WebSocketUpgradeHandler.Builder().addWebSocketListener(new WebSocketTextListener() {
+
+                @Override
+                public void onMessage(String message) {
+                }
+
+                @Override
+                public void onOpen(WebSocket websocket) {
+                }
+
+                @Override
+                public void onClose(WebSocket websocket) {
+                }
+
+                @Override
+                public void onError(Throwable t) {
+                    throwable.set(t);
+                    latch.countDown();
+                }
+            }).build()).get();
+
+            latch.await();
+            assertNotNull(throwable.get());
+            assertEquals(throwable.get().getClass(), IllegalStateException.class);
+        } finally {
+            c.close();
         }
     }
 }

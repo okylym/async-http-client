@@ -13,15 +13,10 @@
 
 package org.asynchttpclient.providers.grizzly;
 
-import org.asynchttpclient.AsyncHttpProvider;
 import org.asynchttpclient.FluentCaseInsensitiveStringsMap;
 import org.asynchttpclient.HttpResponseHeaders;
-
 import org.glassfish.grizzly.http.HttpResponsePacket;
 import org.glassfish.grizzly.http.util.MimeHeaders;
-
-import java.net.URI;
-
 
 /**
  * {@link HttpResponseHeaders} implementation using the Grizzly 2.0 HTTP client
@@ -32,38 +27,34 @@ import java.net.URI;
  */
 class GrizzlyResponseHeaders extends HttpResponseHeaders {
 
-    private final FluentCaseInsensitiveStringsMap headers =
-            new FluentCaseInsensitiveStringsMap();
+    private FluentCaseInsensitiveStringsMap headers;
+    private MimeHeaders grizzlyHeaders;
 
     // ------------------------------------------------------------ Constructors
 
+    public GrizzlyResponseHeaders(final HttpResponsePacket response) {
 
-    public GrizzlyResponseHeaders(final HttpResponsePacket response,
-                                  final URI uri,
-                                  final AsyncHttpProvider provider) {
-
-        super(uri, provider);
-        final MimeHeaders headersLocal = response.getHeaders();
-        for (String name : headersLocal.names()) {
-            for (String header : headersLocal.values(name)) {
-                headers.add(name, header);
-            }
-        }
-
+        grizzlyHeaders = new MimeHeaders();
+        grizzlyHeaders.copyFrom(response.getHeaders());
     }
 
-
     // ---------------------------------------- Methods from HttpResponseHeaders
-
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public FluentCaseInsensitiveStringsMap getHeaders() {
+    public synchronized FluentCaseInsensitiveStringsMap getHeaders() {
+        if (headers == null) {
+            headers = new FluentCaseInsensitiveStringsMap();
+            for (String name : grizzlyHeaders.names()) {
+                for (String header : grizzlyHeaders.values(name)) {
+                    headers.add(name, header);
+                }
+            }
+        }
         return headers;
     }
-
 
     @Override
     public String toString() {

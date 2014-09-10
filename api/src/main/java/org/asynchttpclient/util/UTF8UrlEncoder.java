@@ -20,31 +20,31 @@ package org.asynchttpclient.util;
  * (as per RFC-3986, see [http://www.ietf.org/rfc/rfc3986.txt]).
  */
 public class UTF8UrlEncoder {
-    private static final boolean encodeSpaceUsingPlus = System.getProperty("com.UTF8UrlEncoder.encodeSpaceUsingPlus") == null ? false : true;
+    private static final boolean encodeSpaceUsingPlus = System.getProperty("com.UTF8UrlEncoder.encodeSpaceUsingPlus") != null;
 
     /**
      * Encoding table used for figuring out ascii characters that must be escaped
-     * (all non-Ascii characers need to be encoded anyway)
+     * (all non-Ascii characters need to be encoded anyway)
      */
-    private final static int[] SAFE_ASCII = new int[128];
+    private final static boolean[] SAFE_ASCII = new boolean[128];
 
     static {
         for (int i = 'a'; i <= 'z'; ++i) {
-            SAFE_ASCII[i] = 1;
+            SAFE_ASCII[i] = true;
         }
         for (int i = 'A'; i <= 'Z'; ++i) {
-            SAFE_ASCII[i] = 1;
+            SAFE_ASCII[i] = true;
         }
         for (int i = '0'; i <= '9'; ++i) {
-            SAFE_ASCII[i] = 1;
+            SAFE_ASCII[i] = true;
         }
-        SAFE_ASCII['-'] = 1;
-        SAFE_ASCII['.'] = 1;
-        SAFE_ASCII['_'] = 1;
-        SAFE_ASCII['~'] = 1;
+        SAFE_ASCII['-'] = true;
+        SAFE_ASCII['.'] = true;
+        SAFE_ASCII['_'] = true;
+        SAFE_ASCII['~'] = true;
     }
 
-    private final static char[] HEX = "0123456789ABCDEF".toCharArray();
+    private static final char[] HEX = "0123456789ABCDEF".toCharArray();
 
     private UTF8UrlEncoder() {
     }
@@ -55,20 +55,17 @@ public class UTF8UrlEncoder {
         return sb.toString();
     }
 
-    public static StringBuilder appendEncoded(StringBuilder sb, String input) {
-        final int[] safe = SAFE_ASCII;
-
-        for (int i = 0, len = input.length(); i < len; ++i) {
-            char c = input.charAt(i);
-            if (c <= 127) {
-                if (safe[c] != 0) {
-                    sb.append(c);
-                } else {
+    public static StringBuilder appendEncoded(StringBuilder sb, CharSequence input) {
+        int c;
+        for (int i = 0; i < input.length(); i+= Character.charCount(c)) {
+            c = Character.codePointAt(input, i);
+            if (c <= 127)
+                if (SAFE_ASCII[c])
+                    sb.append((char) c);
+                else
                     appendSingleByteEncoded(sb, c);
-                }
-            } else {
+            else
                 appendMultiByteEncoded(sb, c);
-            }
         }
         return sb;
     }
@@ -86,15 +83,18 @@ public class UTF8UrlEncoder {
     }
 
     private final static void appendMultiByteEncoded(StringBuilder sb, int value) {
-        // two or three bytes? (ignoring surrogate pairs for now, which would yield 4 bytes)
         if (value < 0x800) {
             appendSingleByteEncoded(sb, (0xc0 | (value >> 6)));
             appendSingleByteEncoded(sb, (0x80 | (value & 0x3f)));
-        } else {
+        } else if (value < 0x10000) {
             appendSingleByteEncoded(sb, (0xe0 | (value >> 12)));
             appendSingleByteEncoded(sb, (0x80 | ((value >> 6) & 0x3f)));
             appendSingleByteEncoded(sb, (0x80 | (value & 0x3f)));
+        } else {
+            appendSingleByteEncoded(sb, (0xf0 | (value >> 18)));
+            appendSingleByteEncoded(sb, (0x80 | (value >> 12) & 0x3f));
+            appendSingleByteEncoded(sb, (0x80 | (value >> 6) & 0x3f));
+            appendSingleByteEncoded(sb, (0x80 | (value & 0x3f)));
         }
     }
-
 }

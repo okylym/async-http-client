@@ -15,7 +15,6 @@ package org.asynchttpclient.listener;
 import org.asynchttpclient.FluentCaseInsensitiveStringsMap;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
 /**
  * A simple interface an application can implements in order to received byte transfer information.
@@ -25,36 +24,39 @@ public interface TransferListener {
     /**
      * Invoked when the request bytes are starting to get send.
      */
-    public void onRequestHeadersSent(FluentCaseInsensitiveStringsMap headers);
+    void onRequestHeadersSent(FluentCaseInsensitiveStringsMap headers);
 
     /**
      * Invoked when the response bytes are starting to get received.
      */
-    public void onResponseHeadersReceived(FluentCaseInsensitiveStringsMap headers);
+    void onResponseHeadersReceived(FluentCaseInsensitiveStringsMap headers);
 
     /**
      * Invoked every time response's chunk are received.
      *
-     * @param buffer a {@link ByteBuffer}
+     * @param bytes a {@link byte[]}
      */
-    public void onBytesReceived(ByteBuffer buffer) throws IOException;
+    void onBytesReceived(byte[] bytes) throws IOException;
 
     /**
      * Invoked every time request's chunk are sent.
      *
-     * @param buffer a {@link ByteBuffer}
+     * @param amount  The amount of bytes to transfer
+     * @param current The amount of bytes transferred
+     * @param total   The total number of bytes transferred
      */
-    public void onBytesSent(ByteBuffer buffer);
+    void onBytesSent(long amount, long current, long total);
 
     /**
      * Invoked when the response bytes are been fully received.
      */
-    public void onRequestResponseCompleted();
+    void onRequestResponseCompleted();
 
     /**
      * Invoked when there is an unexpected issue.
      *
      * @param t a {@link Throwable}
      */
-    public void onThrowable(Throwable t);
+    void onThrowable(Throwable t);
 }
+

@@ -12,6 +12,11 @@
  */
 package org.asynchttpclient.async;
 
+import static org.asynchttpclient.async.util.TestUtils.findFreePort;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.fail;
+
 import org.asynchttpclient.AsyncHandler;
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.HttpResponseBodyPart;
@@ -19,7 +24,6 @@ import org.asynchttpclient.HttpResponseHeaders;
 import org.asynchttpclient.HttpResponseStatus;
 import org.asynchttpclient.Request;
 import org.asynchttpclient.RequestBuilder;
-import org.testng.Assert;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -47,6 +51,49 @@ public abstract class MultipleHeaderTest extends AbstractBasicTest {
     private ExecutorService executorService;
     private ServerSocket serverSocket;
     private Future<?> voidFuture;
+
+    @BeforeClass(alwaysRun = true)
+    public void setUpGlobal() throws Exception {
+        port1 = findFreePort();
+
+        serverSocket = new ServerSocket(port1);
+        executorService = Executors.newFixedThreadPool(1);
+        voidFuture = executorService.submit(new Callable<Void>() {
+            public Void call() throws Exception {
+                Socket socket;
+                while ((socket = serverSocket.accept()) != null) {
+                    InputStream inputStream = socket.getInputStream();
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                    String req = reader.readLine().split(" ")[1];
+                    int i = inputStream.available();
+                    long l = inputStream.skip(i);
+                    assertEquals(l, i);
+                    socket.shutdownInput();
+                    if (req.endsWith("MultiEnt")) {
+                        OutputStreamWriter outputStreamWriter = new OutputStreamWriter(socket.getOutputStream());
+                        outputStreamWriter.append("HTTP/1.0 200 OK\n" + "Connection: close\n" + "Content-Type: text/plain; charset=iso-8859-1\n" + "Content-Length: 2\n"
+                                + "Content-Length: 1\n" + "\n0\n");
+                        outputStreamWriter.flush();
+                        socket.shutdownOutput();
+                    } else if (req.endsWith("MultiOther")) {
+                        OutputStreamWriter outputStreamWriter = new OutputStreamWriter(socket.getOutputStream());
+                        outputStreamWriter.append("HTTP/1.0 200 OK\n" + "Connection: close\n" + "Content-Type: text/plain; charset=iso-8859-1\n" + "Content-Length: 1\n"
+                                + "X-Forwarded-For: abc\n" + "X-Forwarded-For: def\n" + "\n0\n");
+                        outputStreamWriter.flush();
+                        socket.shutdownOutput();
+                    }
+                }
+                return null;
+            }
+        });
+    }
+
+    @AfterClass(alwaysRun = true)
+    public void tearDownGlobal() throws Exception {
+        voidFuture.cancel(true);
+        executorService.shutdownNow();
+        serverSocket.close();
+    }
 
     @Test(groups = { "standalone", "default_provider" })
     public void testMultipleOtherHeaders() throws IOException, ExecutionException, TimeoutException, InterruptedException {
@@ -84,16 +131,16 @@ public abstract class MultipleHeaderTest extends AbstractBasicTest {
             }).get(3, TimeUnit.SECONDS);
 
             if (!latch.await(2, TimeUnit.SECONDS)) {
-                Assert.fail("Time out");
+                fail("Time out");
             }
-            Assert.assertNotNull(xffHeaders[0]);
-            Assert.assertNotNull(xffHeaders[1]);
+            assertNotNull(xffHeaders[0]);
+            assertNotNull(xffHeaders[1]);
             try {
-                Assert.assertEquals(xffHeaders[0], "abc");
-                Assert.assertEquals(xffHeaders[1], "def");
+                assertEquals(xffHeaders[0], "abc");
+                assertEquals(xffHeaders[1], "def");
             } catch (AssertionError ex) {
-                Assert.assertEquals(xffHeaders[1], "abc");
-                Assert.assertEquals(xffHeaders[0], "def");
+                assertEquals(xffHeaders[1], "abc");
+                assertEquals(xffHeaders[0], "def");
             }
         } finally {
             ahc.close();
@@ -139,62 +186,21 @@ public abstract class MultipleHeaderTest extends AbstractBasicTest {
             }).get(3, TimeUnit.SECONDS);
 
             if (!latch.await(2, TimeUnit.SECONDS)) {
-                Assert.fail("Time out");
+                fail("Time out");
             }
-            Assert.assertNotNull(clHeaders[0]);
-            Assert.assertNotNull(clHeaders[1]);
+            assertNotNull(clHeaders[0]);
+            assertNotNull(clHeaders[1]);
 
             // We can predict the order
             try {
-                Assert.assertEquals(clHeaders[0], "2");
-                Assert.assertEquals(clHeaders[1], "1");
+                assertEquals(clHeaders[0], "2");
+                assertEquals(clHeaders[1], "1");
             } catch (Throwable ex) {
-                Assert.assertEquals(clHeaders[0], "1");
-                Assert.assertEquals(clHeaders[1], "2");
+                assertEquals(clHeaders[0], "1");
+                assertEquals(clHeaders[1], "2");
             }
         } finally {
             ahc.close();
         }
-    }
-
-    @BeforeClass(alwaysRun = true)
-    public void setUpGlobal() throws Exception {
-        port1 = findFreePort();
-
-        serverSocket = new ServerSocket(port1);
-        executorService = Executors.newFixedThreadPool(1);
-        voidFuture = executorService.submit(new Callable<Void>() {
-            public Void call() throws Exception {
-                Socket socket;
-                while ((socket = serverSocket.accept()) != null) {
-                    InputStream inputStream = socket.getInputStream();
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-                    String req = reader.readLine().split(" ")[1];
-                    int i = inputStream.available();
-                    long l = inputStream.skip(i);
-                    Assert.assertEquals(l, i);
-                    socket.shutdownInput();
-                    if (req.endsWith("MultiEnt")) {
-                        OutputStreamWriter outputStreamWriter = new OutputStreamWriter(socket.getOutputStream());
-                        outputStreamWriter.append("HTTP/1.0 200 OK\n" + "Connection: close\n" + "Content-Type: text/plain; charset=iso-8859-1\n" + "Content-Length: 2\n" + "Content-Length: 1\n" + "\n0\n");
-                        outputStreamWriter.flush();
-                        socket.shutdownOutput();
-                    } else if (req.endsWith("MultiOther")) {
-                        OutputStreamWriter outputStreamWriter = new OutputStreamWriter(socket.getOutputStream());
-                        outputStreamWriter.append("HTTP/1.0 200 OK\n" + "Connection: close\n" + "Content-Type: text/plain; charset=iso-8859-1\n" + "Content-Length: 1\n" + "X-Forwarded-For: abc\n" + "X-Forwarded-For: def\n" + "\n0\n");
-                        outputStreamWriter.flush();
-                        socket.shutdownOutput();
-                    }
-                }
-                return null;
-            }
-        });
-    }
-
-    @AfterClass(alwaysRun = true)
-    public void tearDownGlobal() throws Exception {
-        voidFuture.cancel(true);
-        executorService.shutdownNow();
-        serverSocket.close();
     }
 }

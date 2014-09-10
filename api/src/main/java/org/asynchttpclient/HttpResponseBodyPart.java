@@ -18,39 +18,34 @@ package org.asynchttpclient;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URI;
 import java.nio.ByteBuffer;
 
 /**
  * A callback class used when an HTTP response body is received.
  */
-public abstract class HttpResponseBodyPart extends HttpContent {
-
-    public HttpResponseBodyPart(URI uri, AsyncHttpProvider provider) {
-        super(uri, provider);
-    }
+public abstract class HttpResponseBodyPart {
 
     /**
      * Return length of this part in bytes.
      * 
-     * @since 1.8.0
+     * @since 2.0.0
      */
-    abstract public int length();
-    
+    public abstract int length();
+
     /**
      * Return the response body's part bytes received.
      *
      * @return the response body's part bytes received.
      */
-    abstract public byte[] getBodyPartBytes();
+    public abstract byte[] getBodyPartBytes();
 
     /**
      * Method for accessing contents of this part via stream.
      * 
-     * @since 1.8.0
+     * @since 2.0.0
      */
-    abstract public InputStream readBodyPartBytes();
-    
+    public abstract InputStream readBodyPartBytes();
+
     /**
      * Write the available bytes to the {@link java.io.OutputStream}
      *
@@ -58,7 +53,7 @@ public abstract class HttpResponseBodyPart extends HttpContent {
      * @return The number of bytes written
      * @throws IOException
      */
-    abstract public int writeTo(OutputStream outputStream) throws IOException;
+    public abstract int writeTo(OutputStream outputStream) throws IOException;
 
     /**
      * Return a {@link ByteBuffer} that wraps the actual bytes read from the response's chunk. The {@link ByteBuffer}
@@ -66,27 +61,27 @@ public abstract class HttpResponseBodyPart extends HttpContent {
      *
      * @return {@link ByteBuffer}
      */
-    abstract public ByteBuffer getBodyByteBuffer();
+    public abstract ByteBuffer getBodyByteBuffer();
 
     /**
      * Return true if this is the last part.
      *
      * @return true if this is the last part.
      */
-    abstract public boolean isLast();
+    public abstract boolean isLast();
 
     /**
      * Close the underlying connection once the processing has completed. Invoking that method means the
      * underlying TCP connection will be closed as soon as the processing of the response is completed. That
      * means the underlying connection will never get pooled.
      */
-    abstract public void markUnderlyingConnectionAsClosed();
+    public abstract void markUnderlyingConnectionAsToBeClosed();
 
     /**
      * Return true of the underlying connection will be closed once the response has been fully processed.
      *
      * @return true of the underlying connection will be closed once the response has been fully processed.
      */
-    abstract public boolean closeUnderlyingConnection();
+    public abstract boolean isUnderlyingConnectionToBeClosed();
 
 }

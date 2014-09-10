@@ -12,7 +12,8 @@
  */
 package org.asynchttpclient.extra;
 
-import org.asynchttpclient.resumable.ResumableListener;
+import static org.asynchttpclient.util.MiscUtils.closeSilently;
+
 import org.asynchttpclient.resumable.ResumableListener;
 
 import java.io.IOException;
@@ -20,7 +21,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 
 /**
- * A {@link org.asynchttpclient.listener.TransferListener} which use a {@link RandomAccessFile} for storing the received bytes.
+ * A {@link org.asynchttpclient.resumable.ResumableListener} which use a {@link RandomAccessFile} for storing the received bytes.
  */
 public class ResumableRandomAccessFileListener implements ResumableListener {
     private final RandomAccessFile file;
@@ -53,13 +54,7 @@ public class ResumableRandomAccessFileListener implements ResumableListener {
      * {@inheritDoc}
      */
     public void onAllBytesReceived() {
-        if (file != null) {
-            try {
-                file.close();
-            } catch (IOException e) {
-                ;
-            }
-        }
+        closeSilently(file);
     }
 
     /**
@@ -69,9 +64,7 @@ public class ResumableRandomAccessFileListener implements ResumableListener {
         try {
             return file.length();
         } catch (IOException e) {
-            ;
+            return 0;
         }
-        return 0;
     }
-
 }
