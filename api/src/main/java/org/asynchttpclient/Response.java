@@ -21,7 +21,9 @@ import org.asynchttpclient.uri.Uri;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -68,19 +70,6 @@ public interface Response {
     InputStream getResponseBodyAsStream() throws IOException;
 
     /**
-     * Returns the first maxLength bytes of the response body as a string. Note that this does not check whether the content type is actually a textual one, but it will use the
-     * charset if present in the content type header.
-     * 
-     * @param maxLength
-     *            The maximum number of bytes to read
-     * @param charset
-     *            the charset to use when decoding the stream
-     * @return The response body
-     * @throws java.io.IOException
-     */
-    String getResponseBodyExcerpt(int maxLength, String charset) throws IOException;
-
-    /**
      * Return the entire response body as a String.
      * 
      * @param charset
@@ -88,18 +77,7 @@ public interface Response {
      * @return the entire response body as a String.
      * @throws IOException
      */
-    String getResponseBody(String charset) throws IOException;
-
-    /**
-     * Returns the first maxLength bytes of the response body as a string. Note that this does not check whether the content type is actually a textual one, but it will use the
-     * charset if present in the content type header.
-     * 
-     * @param maxLength
-     *            The maximum number of bytes to read
-     * @return The response body
-     * @throws java.io.IOException
-     */
-    String getResponseBodyExcerpt(int maxLength) throws IOException;
+    String getResponseBody(Charset charset) throws IOException;
 
     /**
      * Return the entire response body as a String.
@@ -147,7 +125,7 @@ public interface Response {
     boolean isRedirected();
 
     /**
-     * Subclasses SHOULD implement toString() in a way that identifies the request for logging.
+     * Subclasses SHOULD implement toString() in a way that identifies the response for logging.
      * 
      * @return The textual representation
      */
@@ -167,7 +145,7 @@ public interface Response {
 
     /**
      * Return true if the response's headers has been computed by an {@link AsyncHandler} It will return false if the either
-     * {@link AsyncHandler#onStatusReceived(HttpResponseStatus)} or {@link AsyncHandler#onHeadersReceived(HttpResponseHeaders)} returned {@link AsyncHandler.STATE#ABORT}
+     * {@link AsyncHandler#onStatusReceived(HttpResponseStatus)} or {@link AsyncHandler#onHeadersReceived(HttpResponseHeaders)} returned {@link AsyncHandler.State#ABORT}
      * 
      * @return true if the response's headers has been computed by an {@link AsyncHandler}
      */
@@ -175,14 +153,30 @@ public interface Response {
 
     /**
      * Return true if the response's body has been computed by an {@link AsyncHandler}. It will return false if the either {@link AsyncHandler#onStatusReceived(HttpResponseStatus)}
-     * or {@link AsyncHandler#onHeadersReceived(HttpResponseHeaders)} returned {@link AsyncHandler.STATE#ABORT}
+     * or {@link AsyncHandler#onHeadersReceived(HttpResponseHeaders)} returned {@link AsyncHandler.State#ABORT}
      * 
      * @return true if the response's body has been computed by an {@link AsyncHandler}
      */
     boolean hasResponseBody();
 
-    public static class ResponseBuilder {
-        private final List<HttpResponseBodyPart> bodyParts = new ArrayList<HttpResponseBodyPart>();
+    /**
+     * Get remote address client initiated request to.
+     * 
+     * @return remote address client initiated request to, may be {@code null}
+     *         if asynchronous provider is unable to provide the remote address
+     */
+    SocketAddress getRemoteAddress();
+
+    /**
+     * Get local address client initiated request from.
+     * 
+     * @return local address client initiated request from, may be {@code null}
+     *         if asynchronous provider is unable to provide the local address
+     */
+    SocketAddress getLocalAddress();
+    
+    class ResponseBuilder {
+        private final List<HttpResponseBodyPart> bodyParts = new ArrayList<>();
         private HttpResponseStatus status;
         private HttpResponseHeaders headers;
 

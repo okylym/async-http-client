@@ -16,6 +16,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 import org.asynchttpclient.util.MiscUtils;
+import org.asynchttpclient.util.StringUtils;
 
 public class Uri {
     
@@ -93,7 +94,7 @@ public class Uri {
 
     public String toUrl() {
         if (url == null) {
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb = StringUtils.stringBuilder();
             sb.append(scheme).append("://");
             if (userInfo != null)
                 sb.append(userInfo).append('@');
@@ -104,14 +105,14 @@ public class Uri {
                 sb.append(path);
             if (query != null)
                 sb.append('?').append(query);
-
             url = sb.toString();
+            sb.setLength(0);
         }
         return url;
     }
 
     public String toRelativeUrl() {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = StringUtils.stringBuilder();
         if (MiscUtils.isNonEmpty(path))
             sb.append(path);
         else

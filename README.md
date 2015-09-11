@@ -1,16 +1,22 @@
-Async Http Client
------------------
+Async Http Client ([@AsyncHttpClient](https://twitter.com/AsyncHttpClient) on twitter)
+---------------------------------------------------
 
-Getting started [HTML](http://sonatype.github.com/async-http-client/) [PDF](http://is.gd/kexrN)
-                With [WebSockets](http://jfarcand.wordpress.com/2011/12/21/writing-websocket-clients-using-asynchttpclient/)
+[Javadoc](http://www.javadoc.io/doc/com.ning/async-http-client/)
 
-Async Http Client library purpose is to allow Java applications to easily execute HTTP requests and asynchronously process the HTTP responses. The library also supports the WebSocket Protocol. The Async HTTP Client library is simple to use. First, in order to add it to your Maven project, simply add this dependency:
+[Getting](https://jfarcand.wordpress.com/2010/12/21/going-asynchronous-using-asynchttpclient-the-basic/) [started](https://jfarcand.wordpress.com/2011/01/04/going-asynchronous-using-asynchttpclient-the-complex/), and use [WebSockets](http://jfarcand.wordpress.com/2011/12/21/writing-websocket-clients-using-asynchttpclient/)
+
+Async Http Client library purpose is to allow Java applications to easily execute HTTP requests and asynchronously process the HTTP responses.
+The library also supports the WebSocket Protocol. The Async HTTP Client library is simple to use.
+
+## Installation
+
+First, in order to add it to your Maven project, simply add this dependency:
 
 ```xml
 <dependency>
   <groupId>com.ning</groupId>
   <artifactId>async-http-client</artifactId>
-  <version>1.8.13</version>
+  <version>1.9.31</version>
 </dependency>
 ```
 
@@ -18,7 +24,41 @@ You can also download the artifact
 
 [Maven Search](http://search.maven.org)
 
-Then in your code you can simply do [Javadoc](http://asynchttpclient.github.io/async-http-client/apidocs/reference/packages.html)
+AHC is an abstraction layer that can work on top of the bare JDK, Netty and Grizzly.
+Note that the JDK implementation is very limited and you should **REALLY** use the other *real* providers.
+
+You then have to add the Netty or Grizzly jars in the classpath.
+
+For Netty:
+
+```xml
+<dependency>
+    <groupId>io.netty</groupId>
+    <artifactId>netty</artifactId>
+    <version>LATEST_NETTY_3_VERSION</version>
+</dependency>
+```
+
+For Grizzly:
+
+```xml
+<dependency>
+    <groupId>org.glassfish.grizzly</groupId>
+    <artifactId>connection-pool</artifactId>
+    <version>LATEST_GRIZZLY_VERSION</version>
+</dependency>
+<dependency>
+    <groupId>org.glassfish.grizzly</groupId>
+    <artifactId>grizzly-websockets</artifactId>
+    <version>LATEST_GRIZZLY_VERSION</version>
+</dependency>
+```
+
+Check [migration guide](MIGRATION.md) for migrating from 1.8 to 1.9.
+
+## Usage
+
+Then in your code you can simply do
 
 ```java
 import com.ning.http.client.*;
@@ -162,7 +202,7 @@ WebSocket websocket = c.prepareGet(getTargetUrl())
           }
 
           @Override
-          public void onClose(.WebSocket websocket) {
+          public void onClose(WebSocket websocket) {
               latch.countDown();
           }
 
@@ -184,10 +224,6 @@ AsyncHttpClient client = new AsyncHttpClient(new GrizzlyAsyncHttpProvider(config
 Keep up to date on the library development by joining the Asynchronous HTTP Client discussion group
 
 [Google Group](http://groups.google.com/group/asynchttpclient)
-
-or follow us on [Twitter](http://twitter.com/jfarcand)
-
-[![githalytics.com alpha](https://cruel-carlota.pagodabox.com/6433679063b2351599c6ca44a08246a2 "githalytics.com")](http://githalytics.com/AsyncHttpClient/async-http-client)
 
 ## Contributing
 

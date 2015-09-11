@@ -12,15 +12,16 @@
  */
 package org.asynchttpclient.util;
 
-import static org.asynchttpclient.util.MiscUtils.isNonEmpty;
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static org.asynchttpclient.util.MiscUtils.*;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.List;
 
 import org.asynchttpclient.AsyncHttpClientConfig;
-import org.asynchttpclient.HttpResponseBodyPart;
+import org.asynchttpclient.Param;
 import org.asynchttpclient.Request;
 import org.asynchttpclient.uri.Uri;
 
@@ -29,62 +30,16 @@ import org.asynchttpclient.uri.Uri;
  */
 public class AsyncHttpProviderUtils {
 
-    public static final IOException REMOTELY_CLOSED_EXCEPTION = new IOException("Remotely Closed");
+    public static final IOException REMOTELY_CLOSED_EXCEPTION = buildStaticIOException("Remotely closed");
+    public static final IOException CHANNEL_CLOSED_EXCEPTION = buildStaticIOException("Channel closed");
 
-    static {
-        REMOTELY_CLOSED_EXCEPTION.setStackTrace(new StackTraceElement[] {});
-    }
-
-    private final static byte[] NO_BYTES = new byte[0];
-
-    public final static Charset DEFAULT_CHARSET = StandardCharsets.ISO_8859_1;
+    public final static Charset DEFAULT_CHARSET = ISO_8859_1;
 
     public static final void validateSupportedScheme(Uri uri) {
         final String scheme = uri.getScheme();
-        if (scheme == null || !scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https") && !scheme.equalsIgnoreCase("ws")
-                && !scheme.equalsIgnoreCase("wss")) {
-            throw new IllegalArgumentException("The URI scheme, of the URI " + uri
-                    + ", must be equal (ignoring case) to 'http', 'https', 'ws', or 'wss'");
+        if (scheme == null || !scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https") && !scheme.equalsIgnoreCase("ws") && !scheme.equalsIgnoreCase("wss")) {
+            throw new IllegalArgumentException("The URI scheme, of the URI " + uri + ", must be equal (ignoring case) to 'http', 'https', 'ws', or 'wss'");
         }
-    }
-
-    /**
-     * @param bodyParts NON EMPTY body part
-     * @param maxLen
-     * @return
-     * @throws UnsupportedEncodingException
-     */
-    public final static byte[] contentToBytes(List<HttpResponseBodyPart> bodyParts, int maxLen) throws UnsupportedEncodingException {
-        final int partCount = bodyParts.size();
-        if (partCount == 0) {
-            return NO_BYTES;
-        }
-        if (partCount == 1) {
-            byte[] chunk = bodyParts.get(0).getBodyPartBytes();
-            if (chunk.length <= maxLen) {
-                return chunk;
-            }
-            byte[] result = new byte[maxLen];
-            System.arraycopy(chunk, 0, result, 0, maxLen);
-            return result;
-        }
-        int size = 0;
-        byte[] result = new byte[maxLen];
-        for (HttpResponseBodyPart part : bodyParts) {
-            byte[] chunk = part.getBodyPartBytes();
-            int amount = Math.min(maxLen - size, chunk.length);
-            System.arraycopy(chunk, 0, result, size, amount);
-            size += amount;
-            if (size == maxLen) {
-                return result;
-            }
-        }
-        if (size < maxLen) {
-            byte[] old = result;
-            result = new byte[old.length];
-            System.arraycopy(old, 0, result, 0, old.length);
-        }
-        return result;
     }
 
     public final static String getBaseUrl(Uri uri) {
@@ -92,14 +47,22 @@ public class AsyncHttpProviderUtils {
     }
 
     public final static String getAuthority(Uri uri) {
-        int port = uri.getPort() != -1? uri.getPort() : getDefaultPort(uri);
+        int port = uri.getPort() != -1 ? uri.getPort() : getExplicitPort(uri);
         return uri.getHost() + ":" + port;
     }
 
-    public final static int getDefaultPort(Uri uri) {
+    public final static boolean isSameBase(Uri uri1, Uri uri2) {
+        return uri1.getScheme().equals(uri2.getScheme()) && uri1.getHost().equals(uri2.getHost()) && getExplicitPort(uri1) == getExplicitPort(uri2);
+    }
+
+    public static final int getSchemeDefaultPort(String scheme) {
+        return scheme.equals("http") || scheme.equals("ws") ? 80 : 443;
+    }
+
+    public static final int getExplicitPort(Uri uri) {
         int port = uri.getPort();
         if (port == -1)
-            port = uri.getScheme().equals("http") || uri.getScheme().equals("ws") ? 80 : 443;
+            port = getSchemeDefaultPort(uri.getScheme());
         return port;
     }
 
@@ -112,7 +75,7 @@ public class AsyncHttpProviderUtils {
         return isNonEmpty(uri.getPath()) ? uri.getPath() : "/";
     }
 
-    public static String parseCharset(String contentType) {
+    public static Charset parseCharset(String contentType) {
         for (String part : contentType.split(";")) {
             if (part.trim().startsWith("charset=")) {
                 String[] val = part.split("=");
@@ -123,22 +86,52 @@ public class AsyncHttpProviderUtils {
                     // not correct, but client should be able to handle
                     // it (all browsers do, Grizzly strips it by default)
                     // This is a poor man's trim("\"").trim("'")
-                    return charset.replaceAll("\"", "").replaceAll("'", "");
+                    String charsetName = charset.replaceAll("\"", "").replaceAll("'", "");
+                    return Charset.forName(charsetName);
                 }
             }
         }
         return null;
     }
 
-    public static String keepAliveHeaderValue(AsyncHttpClientConfig config) {
-        return config.isAllowPoolingConnections() ? "keep-alive" : "close";
-    }
-
     public static int requestTimeout(AsyncHttpClientConfig config, Request request) {
-        return request.getRequestTimeoutInMs() != 0 ? request.getRequestTimeoutInMs() : config.getRequestTimeout();
+        return request.getRequestTimeout() != 0 ? request.getRequestTimeout() : config.getRequestTimeout();
     }
 
     public static boolean followRedirect(AsyncHttpClientConfig config, Request request) {
-        return request.getFollowRedirect() != null? request.getFollowRedirect().booleanValue() : config.isFollowRedirect();
+        return request.getFollowRedirect() != null ? request.getFollowRedirect().booleanValue() : config.isFollowRedirect();
+    }
+
+    private static StringBuilder urlEncodeFormParams0(List<Param> params) {
+        StringBuilder sb = StringUtils.stringBuilder();
+        for (Param param : params) {
+            encodeAndAppendFormParam(sb, param.getName(), param.getValue());
+        }
+        sb.setLength(sb.length() - 1);
+        return sb;
+    }
+
+    public static ByteBuffer urlEncodeFormParams(List<Param> params, Charset charset) {
+        return StringUtils.charSequence2ByteBuffer(urlEncodeFormParams0(params), charset);
+    }
+
+    private static void encodeAndAppendFormParam(final StringBuilder sb, final CharSequence name, final CharSequence value) {
+        Utf8UrlEncoder.encodeAndAppendFormElement(sb, name);
+        if (value != null) {
+            sb.append('=');
+            Utf8UrlEncoder.encodeAndAppendFormElement(sb, value);
+        }
+        sb.append('&');
+    }
+
+    public static String hostHeader(Request request, Uri uri) {
+        String virtualHost = request.getVirtualHost();
+        if (virtualHost != null)
+            return virtualHost;
+        else {
+            String host = uri.getHost();
+            int port = uri.getPort();
+            return port == -1 || port == getSchemeDefaultPort(uri.getScheme()) ? host : host + ":" + port;
+        }
     }
 }

@@ -16,15 +16,21 @@
  */
 package org.asynchttpclient;
 
-import org.asynchttpclient.cookie.Cookie;
-import org.asynchttpclient.multipart.Part;
-import org.asynchttpclient.uri.Uri;
-
 import java.io.File;
 import java.io.InputStream;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.Collection;
 import java.util.List;
+
+import org.asynchttpclient.channel.NameResolver;
+import org.asynchttpclient.channel.pool.ConnectionPoolPartitioning;
+import org.asynchttpclient.cookie.Cookie;
+import org.asynchttpclient.proxy.ProxyServer;
+import org.asynchttpclient.request.body.generator.BodyGenerator;
+import org.asynchttpclient.request.body.multipart.Part;
+import org.asynchttpclient.uri.Uri;
 
 /**
  * The Request class can be used to construct HTTP request:
@@ -80,11 +86,23 @@ public interface Request {
     byte[] getByteData();
 
     /**
+     * @return the current request's body as a composite of byte arrays
+     */
+    List<byte[]> getCompositeByteData();
+    
+    /**
      * Return the current request's body as a string
      *
      * @return an String representation of the current request's body.
      */
     String getStringData();
+
+    /**
+     * Return the current request's body as a ByteBuffer
+     * 
+     * @return a ByteBuffer
+     */
+    ByteBuffer getByteBufferData();
 
     /**
      * Return the current request's body as an InputStream
@@ -110,7 +128,7 @@ public interface Request {
     /**
      * Return the current form parameters.
      *
-     * @return a {@link FluentStringsMap} of parameters.
+     * @return a {@link List<Param>} of parameters.
      */
     List<Param> getFormParams();
 
@@ -131,7 +149,7 @@ public interface Request {
     /**
      * Return the query params.
      *
-     * @return {@link FluentStringsMap} of query string
+     * @return {@link List<Param>} of query string
      */
     List<Param> getQueryParams();
 
@@ -168,7 +186,7 @@ public interface Request {
      * Overrides the config default value
      * @return the request timeout
      */
-    int getRequestTimeoutInMs();
+    int getRequestTimeout();
 
     /**
      * Return the HTTP Range header value, or
@@ -178,11 +196,13 @@ public interface Request {
     long getRangeOffset();
 
     /**
-     * Return the encoding value used when encoding the request's body.
+     * Return the charset value used when decoding the request's body.
      *
-     * @return the encoding value used when encoding the request's body.
+     * @return the charset value used when decoding the request's body.
      */
-    String getBodyEncoding();
+    Charset getBodyCharset();
 
     ConnectionPoolPartitioning getConnectionPoolPartitioning();
+
+    NameResolver getNameResolver();
 }

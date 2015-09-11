@@ -15,24 +15,33 @@
  */
 package org.asynchttpclient;
 
+import static org.asynchttpclient.util.AsyncHttpProviderUtils.parseCharset;
+import static org.asynchttpclient.util.AsyncHttpProviderUtils.validateSupportedScheme;
 import static org.asynchttpclient.util.MiscUtils.isNonEmpty;
-
-import org.asynchttpclient.cookie.Cookie;
-import org.asynchttpclient.multipart.Part;
-import org.asynchttpclient.uri.Uri;
-import org.asynchttpclient.util.AsyncHttpProviderUtils;
-import org.asynchttpclient.util.QueryComputer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.InputStream;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
+import org.asynchttpclient.channel.NameResolver;
+import org.asynchttpclient.channel.pool.ConnectionPoolPartitioning;
+import org.asynchttpclient.cookie.Cookie;
+import org.asynchttpclient.proxy.ProxyServer;
+import org.asynchttpclient.request.body.generator.BodyGenerator;
+import org.asynchttpclient.request.body.generator.ReactiveStreamsBodyGenerator;
+import org.asynchttpclient.request.body.multipart.Part;
+import org.asynchttpclient.uri.Uri;
+import org.asynchttpclient.util.UriEncoder;
+import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Builder for {@link Request}
@@ -52,7 +61,9 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         private FluentCaseInsensitiveStringsMap headers = new FluentCaseInsensitiveStringsMap();
         private ArrayList<Cookie> cookies;
         private byte[] byteData;
+        private List<byte[]> compositeByteData;
         private String stringData;
+        private ByteBuffer byteBufferData;
         private InputStream streamData;
         private BodyGenerator bodyGenerator;
         private List<Param> formParams;
@@ -63,10 +74,11 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         private Realm realm;
         private File file;
         private Boolean followRedirect;
-        private int requestTimeoutInMs;
+        private int requestTimeout;
         private long rangeOffset;
-        public String charset;
-        private ConnectionPoolPartitioning connectionPoolPartitioning = PerHostConnectionPoolPartitioning.INSTANCE;
+        public Charset charset;
+        private ConnectionPoolPartitioning connectionPoolPartitioning = ConnectionPoolPartitioning.PerHostConnectionPoolPartitioning.INSTANCE;
+        private NameResolver nameResolver = NameResolver.JdkNameResolver.INSTANCE;
         private List<Param> queryParams;
 
         public RequestImpl() {
@@ -79,23 +91,26 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
                 this.address = prototype.getInetAddress();
                 this.localAddress = prototype.getLocalAddress();
                 this.headers = new FluentCaseInsensitiveStringsMap(prototype.getHeaders());
-                this.cookies = new ArrayList<Cookie>(prototype.getCookies());
+                this.cookies = new ArrayList<>(prototype.getCookies());
                 this.byteData = prototype.getByteData();
+                this.compositeByteData = prototype.getCompositeByteData();
                 this.stringData = prototype.getStringData();
+                this.byteBufferData = prototype.getByteBufferData();
                 this.streamData = prototype.getStreamData();
                 this.bodyGenerator = prototype.getBodyGenerator();
-                this.formParams = prototype.getFormParams() == null ? null : new ArrayList<Param>(prototype.getFormParams());
-                this.parts = prototype.getParts() == null ? null : new ArrayList<Part>(prototype.getParts());
+                this.formParams = prototype.getFormParams() == null ? null : new ArrayList<>(prototype.getFormParams());
+                this.parts = prototype.getParts() == null ? null : new ArrayList<>(prototype.getParts());
                 this.virtualHost = prototype.getVirtualHost();
                 this.length = prototype.getContentLength();
                 this.proxyServer = prototype.getProxyServer();
                 this.realm = prototype.getRealm();
                 this.file = prototype.getFile();
                 this.followRedirect = prototype.getFollowRedirect();
-                this.requestTimeoutInMs = prototype.getRequestTimeoutInMs();
+                this.requestTimeout = prototype.getRequestTimeout();
                 this.rangeOffset = prototype.getRangeOffset();
-                this.charset = prototype.getBodyEncoding();
+                this.charset = prototype.getBodyCharset();
                 this.connectionPoolPartitioning = prototype.getConnectionPoolPartitioning();
+                this.nameResolver = prototype.getNameResolver();
             }
         }
 
@@ -140,8 +155,18 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         }
 
         @Override
+        public List<byte[]> getCompositeByteData() {
+            return compositeByteData;
+        }
+
+        @Override
         public String getStringData() {
             return stringData;
+        }
+
+        @Override
+        public ByteBuffer getByteBufferData() {
+            return byteBufferData;
         }
 
         @Override
@@ -195,8 +220,8 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         }
 
         @Override
-        public int getRequestTimeoutInMs() {
-            return requestTimeoutInMs;
+        public int getRequestTimeout() {
+            return requestTimeout;
         }
 
         @Override
@@ -205,7 +230,7 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         }
 
         @Override
-        public String getBodyEncoding() {
+        public Charset getBodyCharset() {
             return charset;
         }
 
@@ -215,11 +240,16 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         }
 
         @Override
+        public NameResolver getNameResolver() {
+            return nameResolver;
+        }
+
+        @Override
         public List<Param> getQueryParams() {
             if (queryParams == null)
                 // lazy load
                 if (isNonEmpty(uri.getQuery())) {
-                    queryParams = new ArrayList<Param>(1);
+                    queryParams = new ArrayList<>(1);
                     for (String queryStringParam : uri.getQuery().split("&")) {
                         int pos = queryStringParam.indexOf('=');
                         if (pos <= 0)
@@ -263,29 +293,29 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
 
     private final Class<T> derived;
     protected final RequestImpl request;
-    protected QueryComputer queryComputer;
-    protected List<Param> queryParams;
+    protected UriEncoder uriEncoder;
+    protected List<Param> rbQueryParams;
     protected SignatureCalculator signatureCalculator;
 
     protected RequestBuilderBase(Class<T> derived, String method, boolean disableUrlEncoding) {
-        this(derived, method, QueryComputer.queryComputer(disableUrlEncoding));
+        this(derived, method, UriEncoder.uriEncoder(disableUrlEncoding));
     }
 
-    protected RequestBuilderBase(Class<T> derived, String method, QueryComputer queryComputer) {
+    protected RequestBuilderBase(Class<T> derived, String method, UriEncoder uriEncoder) {
         this.derived = derived;
         request = new RequestImpl();
         request.method = method;
-        this.queryComputer = queryComputer;
+        this.uriEncoder = uriEncoder;
     }
 
     protected RequestBuilderBase(Class<T> derived, Request prototype) {
-        this(derived, prototype, QueryComputer.URL_ENCODING_ENABLED_QUERY_COMPUTER);
+        this(derived, prototype, UriEncoder.FIXING);
     }
 
-    protected RequestBuilderBase(Class<T> derived, Request prototype, QueryComputer queryComputer) {
+    protected RequestBuilderBase(Class<T> derived, Request prototype, UriEncoder uriEncoder) {
         this.derived = derived;
         request = new RequestImpl(prototype);
-        this.queryComputer = queryComputer;
+        this.uriEncoder = uriEncoder;
     }
     
     public T setUrl(String url) {
@@ -344,11 +374,11 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
 
     private void lazyInitCookies() {
         if (request.cookies == null)
-            request.cookies = new ArrayList<Cookie>(3);
+            request.cookies = new ArrayList<>(3);
     }
 
     public T setCookies(Collection<Cookie> cookies) {
-        request.cookies = new ArrayList<Cookie>(cookies);
+        request.cookies = new ArrayList<>(cookies);
         return derived.cast(this);
     }
 
@@ -384,7 +414,7 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
     }
     
     public void resetQuery() {
-        queryParams = null;
+        rbQueryParams = null;
         request.uri = request.uri.withNewQuery(null);
     }
     
@@ -394,8 +424,11 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
 
     public void resetNonMultipartData() {
         request.byteData = null;
+        request.compositeByteData = null;
+        request.byteBufferData = null;
         request.stringData = null;
         request.streamData = null;
+        request.bodyGenerator = null;
         request.length = -1;
     }
 
@@ -408,28 +441,44 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         return derived.cast(this);
     }
 
-    public T setBody(byte[] data) {
+    private void resetBody() {
         resetFormParams();
         resetNonMultipartData();
         resetMultipartData();
+    }
+
+    public T setBody(byte[] data) {
+        resetBody();
         request.byteData = data;
         return derived.cast(this);
     }
 
+    public T setBody(List<byte[]> data) {
+        resetBody();
+        request.compositeByteData = data;
+        return derived.cast(this);
+    }
+
     public T setBody(String data) {
-        resetFormParams();
-        resetNonMultipartData();
-        resetMultipartData();
+        resetBody();
         request.stringData = data;
         return derived.cast(this);
     }
 
+    public T setBody(ByteBuffer data) {
+        resetBody();
+        request.byteBufferData = data;
+        return derived.cast(this);
+    }
+    
     public T setBody(InputStream stream) {
-        resetFormParams();
-        resetNonMultipartData();
-        resetMultipartData();
+        resetBody();
         request.streamData = stream;
         return derived.cast(this);
+    }
+
+    public T setBody(Publisher<ByteBuffer> publisher) {
+        return setBody(new ReactiveStreamsBodyGenerator(publisher));
     }
 
     public T setBody(BodyGenerator bodyGenerator) {
@@ -438,17 +487,17 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
     }
 
     public T addQueryParam(String name, String value) {
-        if (queryParams == null)
-            queryParams = new ArrayList<Param>(1);
-        queryParams.add(new Param(name, value));
+        if (rbQueryParams == null)
+            rbQueryParams = new ArrayList<>(1);
+        rbQueryParams.add(new Param(name, value));
         return derived.cast(this);
     }
 
     public T addQueryParams(List<Param> params) {
-        if (queryParams == null)
-            queryParams = params;
+        if (rbQueryParams == null)
+            rbQueryParams = params;
         else
-            queryParams.addAll(params);
+            rbQueryParams.addAll(params);
         return derived.cast(this);
     }
 
@@ -456,7 +505,7 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         if (map == null)
             return null;
 
-        List<Param> params = new ArrayList<Param>(map.size());
+        List<Param> params = new ArrayList<>(map.size());
         for (Map.Entry<String, List<String>> entries : map.entrySet()) {
             String name = entries.getKey();
             for (String value : entries.getValue())
@@ -473,7 +522,7 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         // reset existing query
         if (isNonEmpty(request.uri.getQuery()))
             request.uri = request.uri.withNewQuery(null);
-        queryParams = params;
+        rbQueryParams = params;
         return derived.cast(this);
     }
     
@@ -481,7 +530,7 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         resetNonMultipartData();
         resetMultipartData();
         if (request.formParams == null)
-            request.formParams = new ArrayList<Param>(1);
+            request.formParams = new ArrayList<>(1);
         request.formParams.add(new Param(name, value));
         return derived.cast(this);
     }
@@ -500,7 +549,7 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         resetFormParams();
         resetNonMultipartData();
         if (request.parts == null)
-            request.parts = new ArrayList<Part>();
+            request.parts = new ArrayList<>();
         request.parts.add(part);
         return derived.cast(this);
     }
@@ -520,8 +569,8 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         return derived.cast(this);
     }
 
-    public T setRequestTimeoutInMs(int requestTimeoutInMs) {
-        request.requestTimeoutInMs = requestTimeoutInMs;
+    public T setRequestTimeout(int requestTimeout) {
+        request.requestTimeout = requestTimeout;
         return derived.cast(this);
     }
 
@@ -535,13 +584,18 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         return derived.cast(this);
     }
 
-    public T setBodyEncoding(String charset) {
+    public T setBodyCharset(Charset charset) {
         request.charset = charset;
         return derived.cast(this);
     }
 
     public T setConnectionPoolPartitioning(ConnectionPoolPartitioning connectionPoolPartitioning) {
         request.connectionPoolPartitioning = connectionPoolPartitioning;
+        return derived.cast(this);
+    }
+
+    public T setNameResolver(NameResolver nameResolver) {
+        request.nameResolver = nameResolver;
         return derived.cast(this);
     }
 
@@ -555,7 +609,10 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
          * (order does not matter with current implementation but may in future)
          */
         if (signatureCalculator != null) {
-            signatureCalculator.calculateAndAddSignature(request, this);
+            RequestBuilder rb = new RequestBuilder(request).setSignatureCalculator(null);
+            rb.rbQueryParams = this.rbQueryParams;
+            Request unsignedRequest = rb.build();
+            signatureCalculator.calculateAndAddSignature(unsignedRequest, this);
         }
     }
     
@@ -564,7 +621,7 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
             try {
                 final String contentType = request.headers.getFirstValue("Content-Type");
                 if (contentType != null) {
-                    final String charset = AsyncHttpProviderUtils.parseCharset(contentType);
+                    final Charset charset = parseCharset(contentType);
                     if (charset != null) {
                         // ensure that if charset is provided with the Content-Type header,
                         // we propagate that down to the charset of the Request object
@@ -597,18 +654,16 @@ public abstract class RequestBuilderBase<T extends RequestBuilderBase<T>> {
         if (request.uri == null) {
             logger.debug("setUrl hasn't been invoked. Using {}", DEFAULT_REQUEST_URL);
             request.uri = DEFAULT_REQUEST_URL;
+        } else {
+            validateSupportedScheme(request.uri);
         }
 
-        AsyncHttpProviderUtils.validateSupportedScheme(request.uri);
-
-        String newQuery = queryComputer.computeFullQueryString(request.uri.getQuery(), queryParams);
-
-        request.uri = request.uri.withNewQuery(newQuery);
+        request.uri =  uriEncoder.encode(request.uri, rbQueryParams);
     }
 
     public Request build() {
-        computeFinalUri();
         executeSignatureCalculator();
+        computeFinalUri();
         computeRequestCharset();
         computeRequestLength();
         return request;

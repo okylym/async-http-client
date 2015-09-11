@@ -35,9 +35,6 @@ import java.util.concurrent.locks.ReentrantLock;
  * throws an exception it thows a AsyncHttpClientImplException. By default if
  * neither the system property or the property file exists then it will return
  * the default instance of {@link DefaultAsyncHttpClient}
- * 
- * @author sasurendran
- * 
  */
 public class AsyncHttpClientFactory {
 
@@ -99,20 +96,6 @@ public class AsyncHttpClientFactory {
             }
         }
         return new DefaultAsyncHttpClient(provider, config);
-    }
-
-    public static AsyncHttpClient getAsyncHttpClient(String providerClass, AsyncHttpClientConfig config) {
-        if (attemptInstantiation()) {
-            try {
-                Constructor<AsyncHttpClient> constructor = asyncHttpClientImplClass.getConstructor(String.class,
-                        AsyncHttpClientConfig.class);
-                return constructor.newInstance(providerClass, config);
-            } catch (Exception e) {
-                throw new AsyncHttpClientImplException("Unable to find the instantiate the class specified by system property : "
-                        + AsyncImplHelper.ASYNC_HTTP_CLIENT_IMPL_SYSTEM_PROPERTY + "(AsyncHttpProvider) due to : " + e.getMessage(), e);
-            }
-        }
-        return new DefaultAsyncHttpClient(providerClass, config);
     }
 
     private static boolean attemptInstantiation() {

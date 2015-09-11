@@ -12,12 +12,12 @@
  */
 package org.asynchttpclient;
 
+import static java.nio.charset.StandardCharsets.*;
 import static org.testng.Assert.assertEquals;
 
 import org.asynchttpclient.Realm.AuthScheme;
 import org.asynchttpclient.Realm.RealmBuilder;
 import org.asynchttpclient.uri.Uri;
-import org.asynchttpclient.util.StandardCharsets;
 import org.testng.annotations.Test;
 
 import java.math.BigInteger;
@@ -28,7 +28,7 @@ public class RealmTest {
     public void testClone() {
         RealmBuilder builder = new RealmBuilder();
         builder.setPrincipal("user").setPassword("pass");
-        builder.setEncoding(StandardCharsets.UTF_8.name()).setUsePreemptiveAuth(true);
+        builder.setCharset(UTF_16).setUsePreemptiveAuth(true);
         builder.setRealmName("realm").setAlgorithm("algo");
         builder.setScheme(AuthScheme.BASIC);
         Realm orig = builder.build();
@@ -36,11 +36,11 @@ public class RealmTest {
         Realm clone = new RealmBuilder().clone(orig).build();
         assertEquals(clone.getPrincipal(), orig.getPrincipal());
         assertEquals(clone.getPassword(), orig.getPassword());
-        assertEquals(clone.getEncoding(), orig.getEncoding());
+        assertEquals(clone.getCharset(), orig.getCharset());
         assertEquals(clone.getUsePreemptiveAuth(), orig.getUsePreemptiveAuth());
         assertEquals(clone.getRealmName(), orig.getRealmName());
         assertEquals(clone.getAlgorithm(), orig.getAlgorithm());
-        assertEquals(clone.getAuthScheme(), orig.getAuthScheme());
+        assertEquals(clone.getScheme(), orig.getScheme());
     }
 
     @Test(groups = "fast")
@@ -73,7 +73,7 @@ public class RealmTest {
         Realm orig = builder.build();
 
         String ha1 = getMd5(user + ":" + realm + ":" + pass);
-        String ha2 = getMd5(method + ":" + uri);
+        String ha2 = getMd5(method + ":" + uri.getPath());
         String expectedResponse = getMd5(ha1 + ":" + nonce + ":" + ha2);
 
         assertEquals(expectedResponse, orig.getResponse());
@@ -101,7 +101,7 @@ public class RealmTest {
         String nc = orig.getNc();
         String cnonce = orig.getCnonce();
         String ha1 = getMd5(user + ":" + realm + ":" + pass);
-        String ha2 = getMd5(method + ":" + uri);
+        String ha2 = getMd5(method + ":" + uri.getPath());
         String expectedResponse = getMd5(ha1 + ":" + nonce + ":" + nc + ":" + cnonce + ":" + qop + ":" + ha2);
 
         assertEquals(expectedResponse, orig.getResponse());

@@ -38,8 +38,8 @@ import java.util.Set;
  * original case in the appropriate methods (e.g. {@link FluentCaseInsensitiveStringsMap#keySet()}).
  */
 public class FluentCaseInsensitiveStringsMap implements Map<String, List<String>>, Iterable<Map.Entry<String, List<String>>> {
-    private final Map<String, List<String>> values = new LinkedHashMap<String, List<String>>();
-    private final Map<String, String> keyLookup = new LinkedHashMap<String, String>();
+    private final Map<String, List<String>> values = new LinkedHashMap<>();
+    private final Map<String, String> keyLookup = new LinkedHashMap<>();
 
     public FluentCaseInsensitiveStringsMap() {
     }
@@ -68,7 +68,7 @@ public class FluentCaseInsensitiveStringsMap implements Map<String, List<String>
             List<String> curValues = null;
             if (realKey == null) {
                 keyLookup.put(lcKey, key);
-                curValues = new ArrayList<String>();
+                curValues = new ArrayList<>();
                 values.put(key, curValues);
             } else {
                 curValues = values.get(realKey);
@@ -104,7 +104,7 @@ public class FluentCaseInsensitiveStringsMap implements Map<String, List<String>
                 }
                 if (result == null) {
                     // lazy initialization
-                    result = new ArrayList<String>();
+                    result = new ArrayList<>();
                 }
                 result.add(value);
             }
@@ -137,7 +137,7 @@ public class FluentCaseInsensitiveStringsMap implements Map<String, List<String>
                 }
 
                 if (curValues == null) {
-                    curValues = new ArrayList<String>();
+                    curValues = new ArrayList<>();
                     this.values.put(realKey, curValues);
                 }
                 curValues.addAll(nonNullValues);
@@ -356,7 +356,7 @@ public class FluentCaseInsensitiveStringsMap implements Map<String, List<String>
      */
     @Override
     public Set<String> keySet() {
-        return new LinkedHashSet<String>(keyLookup.values());
+        return new LinkedHashSet<>(keyLookup.values());
     }
 
     /**
@@ -409,10 +409,8 @@ public class FluentCaseInsensitiveStringsMap implements Map<String, List<String>
     public String getFirstValue(String key) {
         List<String> values = get(key);
 
-        if (values == null) {
+        if (values.isEmpty()) {
             return null;
-        } else if (values.isEmpty()) {
-            return "";
         } else {
             return values.get(0);
         }
@@ -427,7 +425,7 @@ public class FluentCaseInsensitiveStringsMap implements Map<String, List<String>
     public String getJoinedValue(String key, String delimiter) {
         List<String> values = get(key);
 
-        if (values == null) {
+        if (values.isEmpty()) {
             return null;
         } else if (values.size() == 1) {
             return values.get(0);
@@ -449,18 +447,13 @@ public class FluentCaseInsensitiveStringsMap implements Map<String, List<String>
      */
     @Override
     public List<String> get(Object key) {
-        if (key == null) {
-            return null;
-        }
+        if (key == null)
+            return Collections.emptyList();
 
         String lcKey = key.toString().toLowerCase(Locale.ENGLISH);
         String realKey = keyLookup.get(lcKey);
 
-        if (realKey == null) {
-            return null;
-        } else {
-            return values.get(realKey);
-        }
+        return realKey != null ? values.get(realKey) : Collections.<String> emptyList();
     }
 
     /**

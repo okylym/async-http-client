@@ -14,7 +14,9 @@ package org.asynchttpclient.webdav;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.List;
 
 import org.asynchttpclient.FluentCaseInsensitiveStringsMap;
@@ -57,19 +59,11 @@ public class WebDavResponse implements Response {
         return response.getResponseBodyAsStream();
     }
 
-    public String getResponseBodyExcerpt(int maxLength) throws IOException {
-        return response.getResponseBodyExcerpt(maxLength);
-    }
-
-    public String getResponseBodyExcerpt(int maxLength, String charset) throws IOException {
-        return response.getResponseBodyExcerpt(maxLength, charset);
-    }
-
     public String getResponseBody() throws IOException {
         return response.getResponseBody();
     }
 
-    public String getResponseBody(String charset) throws IOException {
+    public String getResponseBody(Charset charset) throws IOException {
         return response.getResponseBody(charset);
     }
 
@@ -111,6 +105,14 @@ public class WebDavResponse implements Response {
 
     public boolean hasResponseBody() {
         return response.hasResponseBody();
+    }
+
+    public SocketAddress getRemoteAddress() {
+        return response.getRemoteAddress();
+    }
+
+    public SocketAddress getLocalAddress() {
+        return response.getLocalAddress();
     }
 
     public Document getBodyAsXML() {

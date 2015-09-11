@@ -12,59 +12,77 @@
  */
 package org.asynchttpclient.util;
 
+import static java.nio.charset.StandardCharsets.ISO_8859_1;
+import static org.asynchttpclient.ntlm.NtlmUtils.getNTLM;
 import static org.asynchttpclient.util.AsyncHttpProviderUtils.getNonEmptyPath;
 import static org.asynchttpclient.util.MiscUtils.isNonEmpty;
 
-import org.asynchttpclient.ProxyServer;
-import org.asynchttpclient.Realm;
-import org.asynchttpclient.uri.Uri;
+import java.nio.charset.Charset;
+import java.util.List;
 
-import java.security.NoSuchAlgorithmException;
+import org.asynchttpclient.Realm;
+import org.asynchttpclient.Request;
+import org.asynchttpclient.Realm.AuthScheme;
+import org.asynchttpclient.ntlm.NtlmEngine;
+import org.asynchttpclient.proxy.ProxyServer;
+import org.asynchttpclient.spnego.SpnegoEngine;
+import org.asynchttpclient.uri.Uri;
 
 public final class AuthenticatorUtils {
 
+    private static final String PROXY_AUTHORIZATION_HEADER = "Proxy-Authorization";
+
     public static String computeBasicAuthentication(Realm realm) {
-        String s = realm.getPrincipal() + ":" + realm.getPassword();
-        return "Basic " + Base64.encode(s.getBytes(realm.getCharset()));
+        return computeBasicAuthentication(realm.getPrincipal(), realm.getPassword(), realm.getCharset());
     }
 
     public static String computeBasicAuthentication(ProxyServer proxyServer) {
-        String s = proxyServer.getPrincipal() + ":" + proxyServer.getPassword();
-        return "Basic " + Base64.encode(s.getBytes(proxyServer.getCharset()));
+        return computeBasicAuthentication(proxyServer.getPrincipal(), proxyServer.getPassword(), proxyServer.getCharset());
     }
 
-    private static String computeRealmURI(Realm realm) {
-        if (realm.isTargetProxy()) {
-            return "/";
+    private static String computeBasicAuthentication(String principal, String password, Charset charset) {
+        String s = principal + ":" + password;
+        return "Basic " + Base64.encode(s.getBytes(charset));
+    }
+
+    public static String computeRealmURI(Realm realm) {
+        return computeRealmURI(realm.getUri(), realm.isUseAbsoluteURI(), realm.isOmitQuery());
+    }
+
+    public static String computeRealmURI(Uri uri, boolean useAbsoluteURI, boolean omitQuery) {
+        if (useAbsoluteURI) {
+            return omitQuery && MiscUtils.isNonEmpty(uri.getQuery()) ? uri.withNewQuery(null).toUrl() : uri.toUrl();
         } else {
-            Uri uri = realm.getUri();
-            if (realm.isUseAbsoluteURI()) {
-                return realm.isOmitQuery() && MiscUtils.isNonEmpty(uri.getQuery()) ? uri.withNewQuery(null).toUrl() : uri.toUrl();
-            } else {
-                String path = getNonEmptyPath(uri);
-                return realm.isOmitQuery() || !MiscUtils.isNonEmpty(uri.getQuery()) ? path : path + "?" + uri.getQuery();
-            }
+            String path = getNonEmptyPath(uri);
+            return omitQuery || !MiscUtils.isNonEmpty(uri.getQuery()) ? path : path + "?" + uri.getQuery();
         }
     }
 
-    public static String computeDigestAuthentication(Realm realm) throws NoSuchAlgorithmException {
+    private static String computeDigestAuthentication(Realm realm) {
 
         StringBuilder builder = new StringBuilder().append("Digest ");
         append(builder, "username", realm.getPrincipal(), true);
         append(builder, "realm", realm.getRealmName(), true);
         append(builder, "nonce", realm.getNonce(), true);
         append(builder, "uri", computeRealmURI(realm), true);
-        append(builder, "algorithm", realm.getAlgorithm(), false);
+        if (isNonEmpty(realm.getAlgorithm()))
+            append(builder, "algorithm", realm.getAlgorithm(), false);
 
         append(builder, "response", realm.getResponse(), true);
-        if (isNonEmpty(realm.getOpaque()))
+
+        if (realm.getOpaque() != null)
             append(builder, "opaque", realm.getOpaque(), true);
-        append(builder, "qop", realm.getQop(), false);
-        append(builder, "nc", realm.getNc(), false);
-        append(builder, "cnonce", realm.getCnonce(), true);
+
+        if (realm.getQop() != null) {
+            append(builder, "qop", realm.getQop(), false);
+            // nc and cnonce only sent if server sent qop
+            append(builder, "nc", realm.getNc(), false);
+            append(builder, "cnonce", realm.getCnonce(), true);
+        }
         builder.setLength(builder.length() - 2); // remove tailing ", "
 
-        return new String(builder.toString().getBytes(StandardCharsets.ISO_8859_1));
+        // FIXME isn't there a more efficient way?
+        return new String(StringUtils.charSequence2Bytes(builder, ISO_8859_1));
     }
 
     private static StringBuilder append(StringBuilder builder, String name, String value, boolean quoted) {
@@ -75,5 +93,119 @@ public final class AuthenticatorUtils {
             builder.append(value);
 
         return builder.append(", ");
+    }
+
+    private static List<String> getProxyAuthorizationHeader(Request request) {
+        return request.getHeaders().get(PROXY_AUTHORIZATION_HEADER);
+    }
+
+    public static String perConnectionProxyAuthorizationHeader(Request request, ProxyServer proxyServer, boolean connect) {
+        String proxyAuthorization = null;
+
+        if (connect) {
+            List<String> auth = getProxyAuthorizationHeader(request);
+            String ntlmHeader = getNTLM(auth);
+            if (ntlmHeader != null) {
+                proxyAuthorization = ntlmHeader;
+            }
+
+        } else if (proxyServer != null && proxyServer.getPrincipal() != null && isNonEmpty(proxyServer.getNtlmDomain())) {
+            List<String> auth = getProxyAuthorizationHeader(request);
+            if (getNTLM(auth) == null) {
+                String msg = NtlmEngine.INSTANCE.generateType1Msg();
+                proxyAuthorization = "NTLM " + msg;
+            }
+        }
+
+        return proxyAuthorization;
+    }
+    
+    public static String perRequestProxyAuthorizationHeader(Request request, ProxyServer proxyServer, Realm realm, boolean connect) {
+
+        String proxyAuthorization = null;
+
+        if (!connect && proxyServer != null && proxyServer.getPrincipal() != null && proxyServer.getScheme() == AuthScheme.BASIC) {
+            proxyAuthorization = computeBasicAuthentication(proxyServer);
+        } else if (realm != null && realm.getUsePreemptiveAuth() && realm.isTargetProxy()) {
+
+            switch (realm.getScheme()) {
+            case BASIC:
+                proxyAuthorization = computeBasicAuthentication(realm);
+                break;
+            case DIGEST:
+                if (isNonEmpty(realm.getNonce()))
+                    proxyAuthorization = computeDigestAuthentication(realm);
+                break;
+            case NTLM:
+            case KERBEROS:
+            case SPNEGO:
+                // NTLM, KERBEROS and SPNEGO are only set on the first request,
+                // see firstRequestOnlyAuthorizationHeader
+            case NONE:
+                break;
+            default:
+                throw new IllegalStateException("Invalid Authentication " + realm);
+            }
+        }
+
+        return proxyAuthorization;
+    }
+
+    public static String perConnectionAuthorizationHeader(Request request, ProxyServer proxyServer, Realm realm) {
+        String authorizationHeader = null;
+
+        if (realm != null && realm.getUsePreemptiveAuth()) {
+            switch (realm.getScheme()) {
+            case NTLM:
+                String msg = NtlmEngine.INSTANCE.generateType1Msg();
+                authorizationHeader = "NTLM " + msg;
+                break;
+            case KERBEROS:
+            case SPNEGO:
+                String host;
+                if (proxyServer != null)
+                    host = proxyServer.getHost();
+                else if (request.getVirtualHost() != null)
+                    host = request.getVirtualHost();
+                else
+                    host = request.getUri().getHost();
+
+                authorizationHeader = "Negotiate " + SpnegoEngine.instance().generateToken(host);
+                break;
+            default:
+                break;
+            }
+        }
+
+        return authorizationHeader;
+    }
+
+    public static String perRequestAuthorizationHeader(Request request, Realm realm) {
+
+        String authorizationHeader = null;
+
+        if (realm != null && realm.getUsePreemptiveAuth()) {
+
+            switch (realm.getScheme()) {
+            case BASIC:
+                authorizationHeader = computeBasicAuthentication(realm);
+                break;
+            case DIGEST:
+                if (isNonEmpty(realm.getNonce()))
+                    authorizationHeader = computeDigestAuthentication(realm);
+                break;
+            case NTLM:
+            case KERBEROS:
+            case SPNEGO:
+                // NTLM, KERBEROS and SPNEGO are only set on the first request,
+                // see firstRequestOnlyAuthorizationHeader
+            case NONE:
+                break;
+            default:
+                throw new IllegalStateException("Invalid Authentication " + realm);
+            }
+        }
+
+        return authorizationHeader;
     }
 }

@@ -16,29 +16,19 @@
  */
 package org.asynchttpclient;
 
-import org.asynchttpclient.filter.FilterContext;
-import org.asynchttpclient.filter.FilterException;
-import org.asynchttpclient.filter.RequestFilter;
-import org.asynchttpclient.resumable.ResumableAsyncHandler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class DefaultAsyncHttpClient implements AsyncHttpClient {
+import org.asynchttpclient.filter.FilterContext;
+import org.asynchttpclient.filter.FilterException;
+import org.asynchttpclient.filter.RequestFilter;
+import org.asynchttpclient.handler.resumable.ResumableAsyncHandler;
+import org.asynchttpclient.netty.NettyAsyncHttpProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-    /**
-     * Providers that will be searched for, on the classpath, in order when no
-     * provider is explicitly specified by the developer.
-     */
-    private static final String[] DEFAULT_PROVIDERS = {//
-    "org.asynchttpclient.providers.netty.NettyAsyncHttpProvider",/**/
-    "org.asynchttpclient.providers.grizzly.GrizzlyAsyncHttpProvider"//
-    };
+public class DefaultAsyncHttpClient implements AsyncHttpClient {
 
     private final AsyncHttpProvider httpProvider;
     private final AsyncHttpClientConfig config;
@@ -55,12 +45,6 @@ public class DefaultAsyncHttpClient implements AsyncHttpClient {
     /**
      * Create a new HTTP Asynchronous Client using the default {@link AsyncHttpClientConfig} configuration. The
      * default {@link AsyncHttpProvider} that will be used will be based on the classpath configuration.
-     *
-     * The default providers will be searched for in this order:
-     * <ul>
-     *     <li>netty</li>
-     *     <li>grizzly</li>
-     * </ul>
      *
      * If none of those providers are found, then the engine will throw an IllegalStateException.
      */
@@ -83,29 +67,10 @@ public class DefaultAsyncHttpClient implements AsyncHttpClient {
      * This configuration will be passed to the default {@link AsyncHttpProvider} that will be selected based on
      * the classpath configuration.
      *
-     * The default providers will be searched for in this order:
-     * <ul>
-     *     <li>netty</li>
-     *     <li>grizzly</li>
-     * </ul>
-     *
-     * If none of those providers are found, then the engine will throw an IllegalStateException.
-     *
      * @param config a {@link AsyncHttpClientConfig}
      */
     public DefaultAsyncHttpClient(AsyncHttpClientConfig config) {
-        this(loadDefaultProvider(DEFAULT_PROVIDERS, config), config);
-    }
-
-    /**
-     * Create a new HTTP Asynchronous Client using a {@link AsyncHttpClientConfig} configuration and
-     * and a AsyncHttpProvider class' name.
-     *
-     * @param config        a {@link AsyncHttpClientConfig}
-     * @param providerClass a {@link AsyncHttpProvider}
-     */
-    public DefaultAsyncHttpClient(String providerClass, AsyncHttpClientConfig config) {
-        this(loadProvider(providerClass, config), config);
+        this(new NettyAsyncHttpProvider(config), config);
     }
 
     /**
@@ -225,20 +190,27 @@ public class DefaultAsyncHttpClient implements AsyncHttpClient {
     }
 
     @Override
-    public <T> ListenableFuture<T> executeRequest(Request request, AsyncHandler<T> handler) throws IOException {
+    public <T> ListenableFuture<T> executeRequest(Request request, AsyncHandler<T> handler) {
 
-        FilterContext<T> fc = new FilterContext.FilterContextBuilder<T>().asyncHandler(handler).request(request).build();
-        fc = preProcessRequest(fc);
+        if (config.getRequestFilters().isEmpty()) {
+            return httpProvider.execute(request, handler);
 
-        return httpProvider.execute(fc.getRequest(), fc.getAsyncHandler());
+        } else {
+            FilterContext<T> fc = new FilterContext.FilterContextBuilder<T>().asyncHandler(handler).request(request).build();
+            try {
+                fc = preProcessRequest(fc);
+            } catch (Exception e) {
+                handler.onThrowable(e);
+                return new ListenableFuture.CompletedFailure<>("preProcessRequest failed", e);
+            }
+
+            return httpProvider.execute(fc.getRequest(), fc.getAsyncHandler());
+        }
     }
 
     @Override
-    public ListenableFuture<Response> executeRequest(Request request) throws IOException {
-        FilterContext<Response> fc = new FilterContext.FilterContextBuilder<Response>().asyncHandler(new AsyncCompletionHandlerBase())
-                .request(request).build();
-        fc = preProcessRequest(fc);
-        return httpProvider.execute(fc.getRequest(), fc.getAsyncHandler());
+    public ListenableFuture<Response> executeRequest(Request request) {
+        return executeRequest(request, new AsyncCompletionHandlerBase());
     }
 
     /**
@@ -247,17 +219,11 @@ public class DefaultAsyncHttpClient implements AsyncHttpClient {
      * @param fc {@link FilterContext}
      * @return {@link FilterContext}
      */
-    private <T> FilterContext<T> preProcessRequest(FilterContext<T> fc) throws IOException {
+    private <T> FilterContext<T> preProcessRequest(FilterContext<T> fc) throws FilterException {
         for (RequestFilter asyncFilter : config.getRequestFilters()) {
-            try {
-                fc = asyncFilter.filter(fc);
-                if (fc == null) {
-                    throw new NullPointerException("FilterContext is null");
-                }
-            } catch (FilterException e) {
-                IOException ex = new IOException();
-                ex.initCause(e);
-                throw ex;
+            fc = asyncFilter.filter(fc);
+            if (fc == null) {
+                throw new NullPointerException("FilterContext is null");
             }
         }
 
@@ -271,44 +237,8 @@ public class DefaultAsyncHttpClient implements AsyncHttpClient {
             builder.setHeader("Range", "bytes=" + request.getRangeOffset() + "-");
             request = builder.build();
         }
-        fc = new FilterContext.FilterContextBuilder<T>(fc).request(request).build();
+        fc = new FilterContext.FilterContextBuilder<>(fc).request(request).build();
         return fc;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static AsyncHttpProvider loadProvider(final String className, final AsyncHttpClientConfig config) {
-        try {
-            Class<AsyncHttpProvider> providerClass = (Class<AsyncHttpProvider>) Thread.currentThread().getContextClassLoader()
-                    .loadClass(className);
-            return providerClass.getDeclaredConstructor(new Class[] { AsyncHttpClientConfig.class }).newInstance(config);
-        } catch (Throwable t) {
-            if (t instanceof InvocationTargetException) {
-                final InvocationTargetException ite = (InvocationTargetException) t;
-                if (logger.isErrorEnabled()) {
-                    logger.error("Unable to instantiate provider {}.  Trying other providers.", className);
-                    logger.error(ite.getCause().toString(), ite.getCause());
-                }
-            }
-            // Let's try with another classloader
-            try {
-                Class<AsyncHttpProvider> providerClass = (Class<AsyncHttpProvider>) DefaultAsyncHttpClient.class.getClassLoader().loadClass(
-                        className);
-                return providerClass.getDeclaredConstructor(new Class[] { AsyncHttpClientConfig.class }).newInstance(config);
-            } catch (Throwable ignored) {
-            }
-        }
-        return null;
-    }
-
-    private static AsyncHttpProvider loadDefaultProvider(String[] providerClassNames, AsyncHttpClientConfig config) {
-        AsyncHttpProvider provider;
-        for (final String className : providerClassNames) {
-            provider = loadProvider(className, config);
-            if (provider != null) {
-                return provider;
-            }
-        }
-        throw new IllegalStateException("No providers found on the classpath");
     }
 
     protected BoundRequestBuilder requestBuilder(String method, String url) {

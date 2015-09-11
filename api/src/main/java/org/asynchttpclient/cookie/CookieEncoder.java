@@ -12,6 +12,8 @@
  */
 package org.asynchttpclient.cookie;
 
+import org.asynchttpclient.util.StringUtils;
+
 import java.util.Collection;
 
 public final class CookieEncoder {
@@ -20,10 +22,10 @@ public final class CookieEncoder {
     }
 
     public static String encode(Collection<Cookie> cookies) {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = StringUtils.stringBuilder();
 
         for (Cookie cookie : cookies) {
-            add(sb, cookie.getName(), cookie.getRawValue());
+            add(sb, cookie.getName(), cookie.getValue(), cookie.isWrap());
         }
 
         if (sb.length() > 0) {
@@ -32,7 +34,7 @@ public final class CookieEncoder {
         return sb.toString();
     }
 
-    private static void add(StringBuilder sb, String name, String val) {
+    private static void add(StringBuilder sb, String name, String val, boolean wrap) {
 
         if (val == null) {
             val = "";
@@ -40,7 +42,10 @@ public final class CookieEncoder {
 
         sb.append(name);
         sb.append('=');
-        sb.append(val);
+        if (wrap)
+            sb.append('"').append(val).append('"');
+        else
+            sb.append(val);
         sb.append(';');
         sb.append(' ');
     }

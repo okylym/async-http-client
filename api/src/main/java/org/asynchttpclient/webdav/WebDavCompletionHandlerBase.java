@@ -15,7 +15,9 @@ package org.asynchttpclient.webdav;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -56,27 +58,27 @@ public abstract class WebDavCompletionHandlerBase<T> implements AsyncHandler<T> 
      * {@inheritDoc}
      */
     @Override
-    public final STATE onBodyPartReceived(final HttpResponseBodyPart content) throws Exception {
+    public final State onBodyPartReceived(final HttpResponseBodyPart content) throws Exception {
         bodies.add(content);
-        return STATE.CONTINUE;
+        return State.CONTINUE;
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public final STATE onStatusReceived(final HttpResponseStatus status) throws Exception {
+    public final State onStatusReceived(final HttpResponseStatus status) throws Exception {
         this.status = status;
-        return STATE.CONTINUE;
+        return State.CONTINUE;
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public final STATE onHeadersReceived(final HttpResponseHeaders headers) throws Exception {
+    public final State onHeadersReceived(final HttpResponseHeaders headers) throws Exception {
         this.headers = headers;
-        return STATE.CONTINUE;
+        return State.CONTINUE;
     }
 
     /**
@@ -159,18 +161,8 @@ public abstract class WebDavCompletionHandlerBase<T> implements AsyncHandler<T> 
                 }
 
                 @Override
-                public String getResponseBodyExcerpt(int maxLength, String charset) throws IOException {
-                    return wrappedResponse.getResponseBodyExcerpt(maxLength, charset);
-                }
-
-                @Override
-                public String getResponseBody(String charset) throws IOException {
+                public String getResponseBody(Charset charset) throws IOException {
                     return wrappedResponse.getResponseBody(charset);
-                }
-
-                @Override
-                public String getResponseBodyExcerpt(int maxLength) throws IOException {
-                    return wrappedResponse.getResponseBodyExcerpt(maxLength);
                 }
 
                 @Override
@@ -227,6 +219,16 @@ public abstract class WebDavCompletionHandlerBase<T> implements AsyncHandler<T> 
                 public boolean hasResponseBody() {
                     return wrappedResponse.hasResponseBody();
                 }
+
+                @Override
+                public SocketAddress getRemoteAddress() {
+                    return wrappedResponse.getRemoteAddress();
+                }
+
+                @Override
+                public SocketAddress getLocalAddress() {
+                    return wrappedResponse.getLocalAddress();
+                }
             };
         }
 
@@ -258,6 +260,16 @@ public abstract class WebDavCompletionHandlerBase<T> implements AsyncHandler<T> 
         @Override
         public String getProtocolText() {
             return wrapped.getStatusText();
+        }
+
+        @Override
+        public SocketAddress getRemoteAddress() {
+            return wrapped.getRemoteAddress();
+        }
+        
+        @Override
+        public SocketAddress getLocalAddress() {
+            return wrapped.getLocalAddress();
         }
     }
 
